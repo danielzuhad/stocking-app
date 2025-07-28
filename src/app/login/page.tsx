@@ -9,7 +9,7 @@ const LoginPage = () => {
         <div className="mb-7 flex flex-col items-center justify-center gap-2">
           <div className="flex items-center space-x-1">
             <Boxes className="text-primary h-8 w-8" />
-            <h1 className="text-2xl font-semibold">Stocking App</h1>
+            <h1 className="text-primary text-2xl font-semibold">Stocking App</h1>
           </div>
           <p className="text-muted-foreground text-center text-sm">
             Manage and track your inventory effortlessly.

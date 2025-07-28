@@ -51,12 +51,12 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: "jwt",
-    // maxAge: 60 * 60 * 24, // 1 hari
-    maxAge: 60,
+    maxAge: 60 * 60 * 24, // 1 hari
+    // maxAge: 60,
   },
   jwt: {
-    // maxAge: 60 * 60 * 24, // 1 hari
-    maxAge: 60,
+    maxAge: 60 * 60 * 24, // 1 hari
+    // maxAge: 60,
   },
   callbacks: {
     async jwt({ token, user }) {
@@ -79,13 +79,12 @@ export const authOptions: NextAuthOptions = {
         const lastActive = typeof token.lastActive === "number" ? token.lastActive : 0;
         const diff = now - lastActive;
 
-        // if (diff > oneDay) {
-        if (diff > oneMinute) {
+        if (diff > oneDay) {
+          // if (diff > oneMinute) {
           // Lebih dari 1 hari tidak aktif → logout paksa
           throw new Error("Session expired");
         }
 
-        console.log("💥 Session expired token:", token);
         // Masih aktif → update lastActive
         token.lastActive = now;
       }
@@ -101,7 +100,7 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: "/login",
-    error: "/login?error=auth-expired",
+    error: "/login",
   },
 };
 

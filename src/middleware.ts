@@ -14,9 +14,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/favicon.ico") ||
     pathname.startsWith("/fonts") ||
     pathname.startsWith("/images") ||
-    pathname.match(
-      /\.(css|js|ts|tsx|woff2?|eot|ttf|otf|png|jpg|jpeg|svg|ico)$/
-    );
+    pathname.match(/\.(css|js|ts|tsx|woff2?|eot|ttf|otf|png|jpg|jpeg|svg|ico)$/);
 
   if (isStaticAsset) return NextResponse.next();
 

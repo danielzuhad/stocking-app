@@ -25,10 +25,10 @@ const Topbar = async () => {
   const session = await getServerSession(authOptions);
 
   return (
-    <nav className="flex h-14 w-full justify-center border-b border-white/20 bg-white/40 backdrop-blur-md sm:h-16 lg:h-20">
+    <nav className="fixed top-0 flex h-14 w-full justify-center border-b border-white/20 bg-white/40 backdrop-blur-md sm:h-16 lg:h-20">
       <Container className="flex items-center justify-between">
         {/* ICON */}
-        <NavLink href="/" className="flex items-center space-x-1">
+        <NavLink href="/" className="flex items-center space-x-1 pl-0">
           <Boxes className="text-primary h-6 w-6 sm:h-8 sm:w-8" />
           <h1 className="text-lg font-semibold">Stocking App</h1>
         </NavLink>

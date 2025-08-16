@@ -40,3 +40,10 @@ export function handleErrorToast(
     toast.error(message);
   }
 }
+
+export function enumToValueLabel<T extends readonly string[]>(values: T) {
+  return values.map((val) => ({
+    value: val,
+    label: val.charAt(0).toUpperCase() + val.slice(1),
+  }));
+}

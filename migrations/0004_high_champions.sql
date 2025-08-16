@@ -1,0 +1,2 @@
+CREATE TYPE "public"."category_enum" AS ENUM('fashion', 'electronics', 'beauty', 'home', 'sports', 'toys');--> statement-breakpoint
+ALTER TABLE "items" ALTER COLUMN "category" SET DATA TYPE "public"."category_enum" USING "category"::"public"."category_enum";

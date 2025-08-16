@@ -1,8 +1,9 @@
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { Boxes, Menu } from "lucide-react";
-import { getServerSession } from "next-auth";
+import { Boxes } from "lucide-react";
+import { getServerSession, Session } from "next-auth";
 import Container from "./container";
 import NavLink from "./link";
+import MobileSheet from "./mobile-sheet";
 import NavProfile from "./nav-profile";
 
 const LINKS = [
@@ -24,7 +25,7 @@ const Topbar = async () => {
   const session = await getServerSession(authOptions);
 
   return (
-    <nav className="flex h-14 w-full justify-center border-b sm:h-16 lg:h-20">
+    <nav className="flex h-14 w-full justify-center border-b border-white/20 bg-white/40 backdrop-blur-md sm:h-16 lg:h-20">
       <Container className="flex items-center justify-between">
         {/* ICON */}
         <NavLink href="/" className="flex items-center space-x-1">
@@ -58,12 +59,12 @@ const Topbar = async () => {
             </span>
           </div>
 
-          <NavProfile />
+          <NavProfile session={session} />
         </div>
 
         {/* MOBILE */}
         <div className="lg:hidden">
-          <Menu className="h-6 w-6" />
+          <MobileSheet links={LINKS} session={session as Session} />
         </div>
       </Container>
     </nav>

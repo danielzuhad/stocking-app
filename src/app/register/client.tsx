@@ -141,7 +141,7 @@ const RegisterClient = () => {
           )}
         />
 
-        <Button className="mt-5 w-full" disabled={isSubmitting}>
+        <Button className="mt-5 w-full" disabled={isSubmitting} isLoading={isSubmitting}>
           {isSubmitting ? "Registering..." : "Register"}
         </Button>
 

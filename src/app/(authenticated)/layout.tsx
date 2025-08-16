@@ -10,7 +10,7 @@ const Layout = ({ children }: LayoutProps) => {
   return (
     <>
       <Topbar />
-      <Container>{children}</Container>
+      <Container className="pt-5">{children}</Container>
     </>
   );
 };

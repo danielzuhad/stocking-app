@@ -124,7 +124,7 @@ const LoginClient = () => {
           )}
         />
 
-        <Button className="mt-5 w-full" disabled={isSubmitting}>
+        <Button className="mt-5 w-full" disabled={isSubmitting} isLoading={isSubmitting}>
           {isSubmitting ? "Logging in..." : "Login"}
         </Button>
 

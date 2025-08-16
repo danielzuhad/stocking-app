@@ -1,8 +1,10 @@
+import InventoryClient from "./client";
+
 const InventoryPage = () => {
   return (
-    <div>
-      <p>InventoryPage</p>
-    </div>
+    <section>
+      <InventoryClient />
+    </section>
   );
 };
 

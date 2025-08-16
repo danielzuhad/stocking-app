@@ -1,4 +1,5 @@
 import "next-auth";
+import { EUserRole } from ".";
 
 declare module "next-auth" {
   interface Session {
@@ -7,6 +8,7 @@ declare module "next-auth" {
       uid: string;
       username: string;
       email: string;
+      role: EUserRole;
     };
   }
 
@@ -15,6 +17,7 @@ declare module "next-auth" {
     uid: string;
     username: string;
     email: string;
+    role: EUserRole;
   }
 }
 
@@ -24,6 +27,7 @@ declare module "next-auth/jwt" {
     uid: string;
     username: string;
     email: string;
+    role: EUserRole;
     lastActive?: number;
   }
 }

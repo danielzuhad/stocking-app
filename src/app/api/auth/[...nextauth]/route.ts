@@ -35,6 +35,7 @@ export const authOptions: NextAuthOptions = {
             uid: user.uid,
             username: user.username,
             email: user.email,
+            role: user.role,
           };
         } catch (err) {
           console.error("Auth Error:", err);
@@ -73,6 +74,7 @@ export const authOptions: NextAuthOptions = {
         token.uid = user.uid;
         token.username = user.username;
         token.email = user.email;
+        token.role = user.role;
         token.lastActive = now;
       } else {
         // Saat aktivitas berikutnya
@@ -95,6 +97,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       session.user.id = token.uid;
       session.user.username = token.username;
+      session.user.role = token.role;
       return session;
     },
   },

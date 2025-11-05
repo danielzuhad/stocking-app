@@ -1,4 +1,4 @@
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 import { Boxes } from "lucide-react";
 import { getServerSession, Session } from "next-auth";
 import Container from "./container";

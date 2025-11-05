@@ -2,7 +2,7 @@ import CreateUpdateItemClient from "./client";
 
 const CreateUpdateItemPage = () => {
   return (
-    <section>
+    <section className="pb-20">
       <CreateUpdateItemClient />
     </section>
   );

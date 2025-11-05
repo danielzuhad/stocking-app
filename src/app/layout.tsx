@@ -32,7 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${jakarta.variable} ${poppins.variable} antialiased`}>
-        <ImageKitProvider urlEndpoint={env.data?.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT}>
+        <ImageKitProvider urlEndpoint={env.data?.NEXT_PUBLIC_IMAGEKIT_URL_ENDPOINT  }>
           {children}
           <Toaster />
         </ImageKitProvider>

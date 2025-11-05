@@ -42,7 +42,7 @@ const InventoryClient = ({}: InventoryClientProps) => {
           <Tooltip>
             <TooltipTrigger asChild>
               <Link
-                href={"/inventory/create-update-item"}
+                href={"/inventory/mutation"}
                 className={buttonVariants({ className: "cursor-pointer" })}
               >
                 <PlusSquareIcon className="mr-2 h-4 w-4" />

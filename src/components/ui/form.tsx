@@ -82,8 +82,11 @@ function FormItem({ className, ...props }: React.ComponentProps<"div">) {
 function FormLabel({
   className,
   children,
+  isOptional = false,
   ...props
-}: React.ComponentProps<typeof LabelPrimitive.Root>) {
+}: React.ComponentProps<typeof LabelPrimitive.Root> & {
+  isOptional?: boolean;
+}) {
   const { error, formItemId } = useFormField();
 
   const isRequired = props["aria-required"] === true;
@@ -97,6 +100,7 @@ function FormLabel({
       {...props}
     >
       {children}
+      {isOptional && <span className="text-muted-foreground text-xs">(optional)</span>}
       {isRequired && <span className="text-destructive">*</span>}
     </Label>
   );

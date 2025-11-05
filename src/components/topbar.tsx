@@ -30,7 +30,7 @@ const Topbar = async () => {
         {/* ICON */}
         <NavLink href="/" className="flex items-center space-x-1 pl-0">
           <Boxes className="text-primary h-6 w-6 sm:h-8 sm:w-8" />
-          <h1 className="text-lg font-semibold">Stocking App</h1>
+          <h1 className="text-foreground text-lg font-semibold">Stocking App</h1>
         </NavLink>
 
         {/* LINKS */}
@@ -44,21 +44,6 @@ const Topbar = async () => {
 
         {/* PROFILE  */}
         <div className="hidden items-center lg:flex">
-          <div className="flex flex-col items-end text-sm leading-tight text-gray-700">
-            <span
-              className="block max-w-[120px] truncate text-[17px] font-medium lg:max-w-[250px]"
-              title={session?.user?.username ?? ""}
-            >
-              {session?.user?.username}
-            </span>
-            <span
-              className="block max-w-[120px] truncate text-xs text-gray-500 lg:max-w-[250px]"
-              title={session?.user?.email ?? ""}
-            >
-              {session?.user?.email}
-            </span>
-          </div>
-
           <NavProfile session={session} />
         </div>
 

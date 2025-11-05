@@ -1,5 +1,7 @@
+import { relations } from "drizzle-orm";
 import {
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -9,11 +11,35 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 
-// USERS
+// ========== ENUMS ==========
 export const roleEnum = pgEnum("role_enum", ["admin", "super_admin"]);
+export const categoryEnum = pgEnum("category_enum", [
+  "fashion",
+  "electronics",
+  "beauty",
+  "home",
+  "sports",
+  "toys",
+]);
+export const unitEnum = pgEnum("unit_enum", ["pcs", "box", "kg", "g", "m", "cm", "l", "ml"]);
+export const sourceTypeActivityEnum = pgEnum("source_type_activity_enum", [
+  "purchase_order",
+  "sale",
+  "manual",
+  "return",
+]);
+export const actionEnum = pgEnum("action_enum", [
+  "create_item",
+  "update_item",
+  "stock_in",
+  "stock_out",
+  "sale",
+  "return",
+]);
 
+// ========== USERS ==========
 export const usersTable = pgTable("users", {
-  uid: uuid("uid").primaryKey().defaultRandom(), // UID unik
+  uid: uuid("uid").primaryKey().defaultRandom(),
   username: varchar("username", { length: 50 }).notNull().unique(),
   email: varchar("email", { length: 100 }).notNull().unique(),
   password: varchar("password", { length: 255 }).notNull(),
@@ -24,37 +50,21 @@ export const usersTable = pgTable("users", {
 export type UserCreateType = typeof usersTable.$inferInsert;
 export type UserType = typeof usersTable.$inferSelect;
 
-// ITEM
-export const categoryEnum = pgEnum("category_enum", [
-  "fashion",
-  "electronics",
-  "beauty",
-  "home",
-  "sports",
-  "toys",
-]);
-
-export const unitEnum = pgEnum("unit_enum", [
-  "pcs", // pieces
-  "box", // kotak
-  "kg", // kilogram
-  "g", // gram
-  "m", // meter
-  "cm", // centimeter
-  "l", // liter
-  "ml", // milliliter
-]);
-
+// ========== ITEMS ==========
 export const itemsTable = pgTable("items", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
-  image_url: text("image_url"),
+  image: jsonb("image").$type<{ fileId: string; name: string; url: string }>(),
   category: categoryEnum("category").notNull(),
   brand: varchar("brand", { length: 50 }),
-  sku: varchar("sku", { length: 50 }).unique(),
+  sku: varchar("sku", { length: 50 }).unique(), // optional, bisa dihapus kalau varian punya SKU sendiri
   unit: unitEnum("unit").default("pcs").notNull(),
-  price: numeric("price", { precision: 12, scale: 2 }).default("0.00"),
+
+  created_user_uid: uuid("created_user_uid")
+    .references(() => usersTable.uid)
+    .notNull(),
+
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -62,36 +72,43 @@ export const itemsTable = pgTable("items", {
 export type ItemCreateType = typeof itemsTable.$inferInsert;
 export type ItemType = typeof itemsTable.$inferSelect;
 
-// ITEM VARIANT
+// ========== ITEM VARIANTS ==========
 export const itemVariantsTable = pgTable("item_variants", {
   id: uuid("id").primaryKey().defaultRandom(),
   item_id: uuid("item_id")
     .references(() => itemsTable.id)
     .notNull(),
+
   color: varchar("color", { length: 30 }),
   size: varchar("size", { length: 20 }),
+
   sku: varchar("sku", { length: 50 }).unique(),
+  price: numeric("price", { precision: 12, scale: 2 }).default("0.00"),
   quantity: integer("quantity").default(0),
+
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  updated_at: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export type ItemVariantCreateType = typeof itemVariantsTable.$inferInsert;
 export type ItemVariantType = typeof itemVariantsTable.$inferSelect;
 
-// INVENTORY ACTIVITIES
+// ========== INVENTORY ACTIVITIES ==========
 export const inventoryActivitiesTable = pgTable("inventory_activities", {
   id: uuid("id").primaryKey().defaultRandom(),
 
   item_id: uuid("item_id")
     .notNull()
     .references(() => itemsTable.id),
+
   item_variant_id: uuid("item_variant_id").references(() => itemVariantsTable.id),
 
-  action: text("action").notNull(), // 'CREATE_ITEM', 'UPDATE_ITEM', 'STOCK_IN', 'STOCK_OUT', 'SALE', 'RETURN'
+  action: actionEnum("action").notNull(),
   quantity_change: integer("quantity_change"),
   stock_before: integer("stock_before"),
   stock_after: integer("stock_after"),
 
-  source_type: text("source_type"), // 'PURCHASE_ORDER', 'SALE', 'MANUAL', 'RETURN'
+  source_type: sourceTypeActivityEnum("source_type").notNull(),
   source_id: uuid("source_id"),
 
   description: text("description"),
@@ -102,3 +119,39 @@ export const inventoryActivitiesTable = pgTable("inventory_activities", {
 
 export type InventoryActivityCreateType = typeof inventoryActivitiesTable.$inferInsert;
 export type InventoryActivityType = typeof inventoryActivitiesTable.$inferSelect;
+
+// ========== RELATIONS ==========
+export const usersRelations = relations(usersTable, ({ many }) => ({
+  items: many(itemsTable),
+  activities: many(inventoryActivitiesTable),
+}));
+
+export const itemsRelations = relations(itemsTable, ({ many, one }) => ({
+  created_by: one(usersTable, {
+    fields: [itemsTable.created_user_uid],
+    references: [usersTable.uid],
+  }),
+  variants: many(itemVariantsTable),
+}));
+
+export const itemVariantsRelations = relations(itemVariantsTable, ({ one }) => ({
+  item: one(itemsTable, {
+    fields: [itemVariantsTable.item_id],
+    references: [itemsTable.id],
+  }),
+}));
+
+export const inventoryActivitiesRelations = relations(inventoryActivitiesTable, ({ one }) => ({
+  item: one(itemsTable, {
+    fields: [inventoryActivitiesTable.item_id],
+    references: [itemsTable.id],
+  }),
+  item_variant: one(itemVariantsTable, {
+    fields: [inventoryActivitiesTable.item_variant_id],
+    references: [itemVariantsTable.id],
+  }),
+  created_by: one(usersTable, {
+    fields: [inventoryActivitiesTable.created_by],
+    references: [usersTable.uid],
+  }),
+}));

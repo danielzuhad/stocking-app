@@ -38,8 +38,6 @@ export const authOptions: NextAuthOptions = {
             role: user.role,
           };
         } catch (err) {
-          console.error("Auth Error:", err);
-
           if (err instanceof Error) {
             throw new Error(err.message);
           }

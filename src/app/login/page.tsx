@@ -1,4 +1,6 @@
+import LoadingPage from "@/components/loading-page";
 import { Boxes } from "lucide-react";
+import { Suspense } from "react";
 import LoginClient from "./client";
 
 const LoginPage = () => {
@@ -15,7 +17,10 @@ const LoginPage = () => {
             Manage and track your inventory effortlessly.
           </p>
         </div>
-        <LoginClient />
+
+        <Suspense fallback={<LoadingPage />}>
+          <LoginClient />
+        </Suspense>
       </div>
     </div>
   );

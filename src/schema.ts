@@ -113,7 +113,7 @@ export const inventoryActivitiesTable = pgTable("inventory_activities", {
 
   description: text("description"),
 
-  created_by: uuid("created_by").references(() => usersTable.uid),
+  created_user_uid: uuid("created_user_uid").references(() => usersTable.uid),
   created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -151,7 +151,7 @@ export const inventoryActivitiesRelations = relations(inventoryActivitiesTable, 
     references: [itemVariantsTable.id],
   }),
   created_by: one(usersTable, {
-    fields: [inventoryActivitiesTable.created_by],
+    fields: [inventoryActivitiesTable.created_user_uid],
     references: [usersTable.uid],
   }),
 }));

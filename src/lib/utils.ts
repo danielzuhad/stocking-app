@@ -47,3 +47,12 @@ export function enumToValueLabel<T extends readonly string[]>(values: T) {
     label: val.charAt(0).toUpperCase() + val.slice(1),
   }));
 }
+
+export function getValidEnumValue<T extends readonly string[]>(
+  value: string | null,
+  enumObj: { enumValues: T }
+): T[number] | null {
+  return (enumObj.enumValues as readonly string[]).includes(value ?? "")
+    ? (value as T[number])
+    : null;
+}

@@ -15,64 +15,78 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { apiPost } from "@/lib/axios-client";
 import { categoryItemList, unitItemList } from "@/lib/constants";
 import { handleErrorToast } from "@/lib/utils";
-import { itemsTable } from "@/schema";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createInsertSchema } from "drizzle-zod";
 import { ArrowLeftIcon, PlusIcon, SaveIcon, XIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
-import z from "zod";
+import { z } from "zod";
 
-// bikin schema insert dari table
-const formSchema = createInsertSchema(itemsTable).extend({
+const unitValues = unitItemList.map((option) => option.value) as [string, ...string[]];
+const fashionOptions = categoryItemList.filter((option) => option.value === "fashion");
+const fixedCategoryOption = fashionOptions[0] ?? {
+  value: "fashion",
+  label: "Fashion",
+};
+
+const variantFormSchema = z.object({
+  color: z.string({ error: "Variant is required." }).min(1, { message: "Variant is required." }),
+  size: z.string().optional().nullable(),
+  sku: z.string().optional().nullable(),
+  price: z.number({ error: "Price is required." }).min(0, { message: "Price is required." }),
+  quantity: z
+    .number({ error: "Quantity is required." })
+    .int()
+    .min(0, { message: "Quantity is required." }),
+});
+
+const formSchema = z.object({
   name: z
     .string({ error: "Product name is required." })
-    .min(1, { error: "Product name is required." }),
-  category: z
-    .string({ error: "Please select a product category." })
-    .min(1, { error: "Please select a product category." }),
-  unit: z.string({ error: "Unit is required." }).min(1, { error: "Unit is required." }),
-
+    .min(1, { message: "Product name is required." }),
+  category: z.literal("fashion"),
+  unit: z.enum(unitValues),
+  sku: z.string().optional().nullable(),
+  brand: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  image: z
+    .object({
+      url: z.string().url("Invalid image URL."),
+      fileId: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
   variants: z
-    .array(
-      z.object({
-        color: z
-          .string({ error: "Variant is required." })
-          .min(1, { error: "Variant is required." }),
-        size: z.string().optional(),
-        sku: z.string().optional(),
-        price: z.string({ error: "Price is required." }).min(0, { error: "Price is required." }),
-        quantity: z
-          .string({ error: "Quantity is required" })
-          .min(0, { error: "Quantity is required" }),
-      })
-    )
-    .nonempty({ error: "At least one product variant is required." }),
+    .array(variantFormSchema)
+    .min(1, { message: "At least one product variant is required." }),
 });
 
 // contoh: validasi
 type FormType = z.infer<typeof formSchema>;
 
 export default function CreateUpdateItemClient() {
+  const router = useRouter();
+
   const form = useForm<FormType>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      name: undefined,
-      sku: undefined,
-      brand: undefined,
+      name: "",
+      sku: "",
+      brand: "",
       category: "fashion",
-      description: undefined,
-
+      description: "",
+      image: null,
       unit: "pcs",
       variants: [
         {
-          color: undefined,
-          size: undefined,
-          sku: undefined,
-          quantity: undefined,
-          price: undefined,
+          color: "",
+          size: "",
+          sku: "",
+          quantity: 0,
+          price: 0,
         },
       ],
     },
@@ -85,17 +99,32 @@ export default function CreateUpdateItemClient() {
     name: "variants",
   });
 
-  const onSubmit = (data: FormType) => {
+  const onSubmit = async (data: FormType) => {
     try {
       const payload = {
-        ...data,
+        name: data.name,
+        category: data.category,
+        unit: data.unit,
+        sku: data.sku?.trim() ? data.sku : null,
+        brand: data.brand?.trim() ? data.brand : null,
+        description: data.description?.trim() ? data.description : null,
+        image: data.image ?? null,
+        variants: data.variants.map((variant) => ({
+          color: variant.color,
+          size: variant.size?.trim() ? variant.size : null,
+          sku: variant.sku?.trim() ? variant.sku : null,
+          price: variant.price,
+          quantity: variant.quantity,
+        })),
       };
 
-      console.log({ payload });
+      await apiPost("/items", payload);
 
-      toast.success("Success", {
-        description: "You have added an item.",
+      toast.success("Item created successfully.", {
+        description: "Your product has been added to the inventory.",
       });
+
+      router.push("/inventory");
     } catch (error) {
       handleErrorToast(error);
     }
@@ -141,12 +170,18 @@ export default function CreateUpdateItemClient() {
                     <FormItem>
                       <FormLabel aria-required>Category</FormLabel>
                       <SelectInput
-                        {...field}
-                        isDisabled={true}
-                        options={categoryItemList}
-                        onChange={(val) => field.onChange(val)}
-                        value={categoryItemList?.find((opt) => opt.value === field.value)}
-                        placeholder="Select a category"
+                        name={field.name}
+                        isDisabled
+                        isSearchable={false}
+                        options={[fixedCategoryOption]}
+                        onChange={(option) =>
+                          field.onChange((option as { value: string } | null)?.value ?? "fashion")
+                        }
+                        value={
+                          fashionOptions.find((option) => option.value === field.value) ??
+                          fixedCategoryOption
+                        }
+                        placeholder="Category"
                       />
                       <FormMessage />
                     </FormItem>
@@ -163,7 +198,7 @@ export default function CreateUpdateItemClient() {
                         <Input
                           {...field}
                           placeholder="e.g. PROD-001"
-                          value={field.value || ""}
+                          value={field.value ?? ""}
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -182,7 +217,7 @@ export default function CreateUpdateItemClient() {
                         <Input
                           {...field}
                           placeholder="e.g. Samsung, Nivea, IKEA"
-                          value={field.value || ""}
+                          value={field.value ?? ""}
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -199,10 +234,12 @@ export default function CreateUpdateItemClient() {
                       <FormLabel aria-required>Unit of Measure</FormLabel>
                       <FormControl>
                         <SelectInput
-                          {...field}
+                          name={field.name}
                           options={unitItemList}
-                          onChange={(val) => field.onChange(val)}
-                          value={unitItemList?.find((opt) => opt.value === field.value)}
+                          onChange={(option) =>
+                            field.onChange((option as { value: string } | null)?.value ?? "")
+                          }
+                          value={unitItemList.find((opt) => opt.value === field.value) ?? null}
                           placeholder="Select unit (e.g. pcs, box, ml)"
                           isDisabled={isSubmitting}
                         />
@@ -224,7 +261,7 @@ export default function CreateUpdateItemClient() {
                         <Textarea
                           {...field}
                           placeholder="e.g. Lightweight cotton shirt designed for everyday comfort and versatility."
-                          value={field.value || ""}
+                          value={field.value ?? ""}
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -239,9 +276,10 @@ export default function CreateUpdateItemClient() {
                   render={({ field }) => (
                     <FormItem className="w-full">
                       <ImageUpload
-                        initialUrl={field?.value?.url}
+                        initialUrl={field?.value?.url ?? null}
                         maxSizeMB={1}
                         onChange={field.onChange}
+                        className="h-full"
                       />
                     </FormItem>
                   )}
@@ -289,7 +327,7 @@ export default function CreateUpdateItemClient() {
                             <Input
                               {...field}
                               placeholder="e.g. Black, Mint, Matte Finish"
-                              value={field.value || ""}
+                              value={field.value ?? ""}
                               disabled={isSubmitting}
                             />
                           </FormControl>
@@ -311,7 +349,7 @@ export default function CreateUpdateItemClient() {
                             <Input
                               {...field}
                               placeholder="e.g. M, 250ml, 1kg"
-                              value={field.value || ""}
+                              value={field.value ?? ""}
                               disabled={isSubmitting}
                             />
                           </FormControl>
@@ -332,7 +370,7 @@ export default function CreateUpdateItemClient() {
                             <Input
                               {...field}
                               placeholder="e.g. PROD-BLK-M"
-                              value={field.value || ""}
+                              value={field.value ?? ""}
                               disabled={isSubmitting}
                             />
                           </FormControl>
@@ -355,8 +393,10 @@ export default function CreateUpdateItemClient() {
                               thousandSeparator
                               customInput={Input}
                               allowNegative={false}
-                              onValueChange={(values) => field.onChange(values.floatValue || 0)}
-                              value={field.value}
+                              onValueChange={(values) =>
+                                field.onChange(values.floatValue ?? undefined)
+                              }
+                              value={field.value ?? ""}
                               placeholder="e.g. 349,000"
                               disabled={isSubmitting}
                             />
@@ -375,14 +415,15 @@ export default function CreateUpdateItemClient() {
                           <FormLabel className="lg:hidden">Quantity</FormLabel>
                           <FormControl>
                             <InputNumericFormat
-                              {...field}
                               placeholder="e.g. 25"
                               thousandSeparator
                               customInput={Input}
                               allowNegative={false}
                               disabled={isSubmitting}
-                              onValueChange={(values) => field.onChange(values.floatValue || 0)}
-                              value={field.value}
+                              onValueChange={(values) =>
+                                field.onChange(values.floatValue ?? undefined)
+                              }
+                              value={field.value ?? ""}
                             />
                           </FormControl>
                           <FormMessage />
@@ -399,7 +440,7 @@ export default function CreateUpdateItemClient() {
                         onClick={() => {
                           if (fields.length === 1) {
                             form.setValue("variants", [
-                              { color: "", size: "", sku: "", quantity: "0", price: "0" },
+                              { color: "", size: "", sku: "", quantity: 0, price: 0 },
                             ]);
                           } else {
                             remove(index);
@@ -418,9 +459,7 @@ export default function CreateUpdateItemClient() {
                 <Button
                   type="button"
                   variant="primary_outline"
-                  onClick={() =>
-                    append({ color: "", size: "", sku: "", quantity: "0", price: "0" })
-                  }
+                  onClick={() => append({ color: "", size: "", sku: "", quantity: 0, price: 0 })}
                   disabled={isSubmitting}
                 >
                   <PlusIcon className="mr-1" /> Add Variant
@@ -430,12 +469,23 @@ export default function CreateUpdateItemClient() {
           </div>
 
           <div className="flex flex-col-reverse gap-2 pt-5 md:flex-row md:justify-end">
-            <Button type="button" className="w-full md:w-fit" variant={"outline"}>
+            <Button
+              type="button"
+              className="w-full md:w-fit"
+              variant={"outline"}
+              onClick={() => router.back()}
+              disabled={isSubmitting}
+            >
               <ArrowLeftIcon />
               Back
             </Button>
 
-            <Button type="submit" className="flex w-full items-center md:w-fit">
+            <Button
+              type="submit"
+              className="flex w-full items-center md:w-fit"
+              isLoading={isSubmitting}
+              disabled={isSubmitting}
+            >
               <SaveIcon />
               Save
             </Button>

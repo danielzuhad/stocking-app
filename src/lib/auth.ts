@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { usersTable } from "@/schema";
+import { companiesTable, usersTable } from "@/schema";
 import { compare } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { NextAuthOptions } from "next-auth";
@@ -19,23 +19,31 @@ export const authOptions: NextAuthOptions = {
             throw new Error("Username and password are required.");
           }
 
-          const user = await db
-            .select()
+          const result = await db
+            .select({
+              user: usersTable,
+              companyName: companiesTable.name,
+            })
             .from(usersTable)
+            .leftJoin(companiesTable, eq(usersTable.company_id, companiesTable.id))
             .where(eq(usersTable.username, credentials.username))
+            .limit(1)
             .then((res) => res[0]);
 
-          if (!user) throw new Error("User is not found.");
+          if (!result?.user) throw new Error("User is not found.");
+
+          const user = result.user;
 
           const valid = await compare(credentials.password, user.password);
           if (!valid) throw new Error("Password is wrong.");
 
           return {
-            id: user.uid,
-            uid: user.uid,
+            id: user.id,
             username: user.username,
             email: user.email,
             role: user.role,
+            companyId: user.company_id ?? null,
+            companyName: result.companyName ?? null,
           };
         } catch (err) {
           if (err instanceof Error) {
@@ -65,14 +73,12 @@ export const authOptions: NextAuthOptions = {
 
       if (user) {
         // Saat login pertama
-        token.uid = user.id;
-        token.username = user.username;
-        token.lastActive = now;
-        token.id = user.id;
-        token.uid = user.uid;
+        token.userId = user.id;
         token.username = user.username;
         token.email = user.email;
         token.role = user.role;
+        token.companyId = "companyId" in user ? user.companyId ?? null : null;
+        token.companyName = "companyName" in user ? user.companyName ?? null : null;
         token.lastActive = now;
       } else {
         // Saat aktivitas berikutnya
@@ -93,9 +99,12 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token }) {
-      session.user.id = token.uid;
+      session.user.id = token.userId as string;
       session.user.username = token.username;
+      session.user.email = token.email;
       session.user.role = token.role;
+      session.user.companyId = token.companyId ?? null;
+      session.user.companyName = token.companyName ?? null;
       return session;
     },
   },

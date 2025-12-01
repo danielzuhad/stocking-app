@@ -7,11 +7,6 @@ export async function GET() {
   // For example, you can check if the user is logged in or has the necessary permissions
   // If the user is not authenticated, you can return an error response
 
-  console.log("ENV:", {
-    private: process.env.IMAGEKIT_PRIVATE_KEY,
-    public: process.env.IMAGEKIT_PUBLIC_KEY,
-  });
-
   const { token, expire, signature } = getUploadAuthParams({
     privateKey: env.data?.IMAGEKIT_PRIVATE_KEY as string,
     publicKey: env.data?.IMAGEKIT_PUBLIC_KEY as string,

@@ -14,7 +14,6 @@ import { handleErrorToast } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff } from "lucide-react";
 import { signIn } from "next-auth/react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -128,12 +127,6 @@ const LoginClient = () => {
           {isSubmitting ? "Logging in..." : "Login"}
         </Button>
 
-        <div className="text-muted-foreground -mt-1 text-center text-sm">
-          Don&apos;t have an account?{" "}
-          <Link href="/register" className="text-primary font-medium hover:underline">
-            Register here
-          </Link>
-        </div>
       </form>
     </Form>
   );

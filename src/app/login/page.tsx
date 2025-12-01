@@ -1,4 +1,4 @@
-import LoadingPage from "@/components/loading-page";
+import LoadingPage from "@/components/shared/loading-page";
 import { Boxes } from "lucide-react";
 import { Suspense } from "react";
 import LoginClient from "./client";

@@ -26,6 +26,11 @@ const NavProfile = ({ session }: Props) => {
             >
               {session?.user?.username}
             </span>
+            {session?.user?.companyName && (
+              <span className="block max-w-[120px] truncate text-[11px] text-gray-500 lg:max-w-[250px]">
+                {session.user.companyName}
+              </span>
+            )}
             <span
               className="block max-w-[120px] truncate text-xs text-gray-500 lg:max-w-[250px]"
               title={session?.user?.email ?? ""}

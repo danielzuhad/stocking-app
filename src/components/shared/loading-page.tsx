@@ -3,11 +3,9 @@
 import { motion } from "framer-motion";
 import { Boxes, Loader2 } from "lucide-react";
 
-interface LoadingPageProps {}
-
-const LoadingPage = ({}: LoadingPageProps) => {
+const LoadingPage = () => {
   return (
-    <div className="from-primary/5 via-background to-primary/10 flex h-screen w-full flex-col items-center justify-center bg-gradient-to-br">
+    <div className="flex w-full flex-col items-center justify-center py-20">
       {/* Logo + App Name */}
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}

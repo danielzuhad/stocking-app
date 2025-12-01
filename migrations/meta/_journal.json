@@ -78,6 +78,27 @@
       "when": 1762330202551,
       "tag": "0010_illegal_silver_centurion",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1764059044293,
+      "tag": "0011_multi_tenant_support",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1764062295586,
+      "tag": "0012_majestic_titania",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1764065000000,
+      "tag": "0013_consistent_ids",
+      "breakpoints": true
     }
   ]
 }

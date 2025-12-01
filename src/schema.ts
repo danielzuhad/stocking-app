@@ -37,13 +37,30 @@ export const actionEnum = pgEnum("action_enum", [
   "return",
 ]);
 
+// ========== COMPANIES ==========
+export const companiesTable = pgTable("companies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: varchar("name", { length: 120 }).notNull().unique(),
+  slug: varchar("slug", { length: 120 }).notNull().unique(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
+  created_by_user_id: uuid("created_by_user_id"),
+  updated_by_user_id: uuid("updated_by_user_id"),
+  updated_at: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type CompanyCreateType = typeof companiesTable.$inferInsert;
+export type CompanyType = typeof companiesTable.$inferSelect;
+
 // ========== USERS ==========
 export const usersTable = pgTable("users", {
-  uid: uuid("uid").primaryKey().defaultRandom(),
+  id: uuid("id").primaryKey().defaultRandom(),
   username: varchar("username", { length: 50 }).notNull().unique(),
   email: varchar("email", { length: 100 }).notNull().unique(),
   password: varchar("password", { length: 255 }).notNull(),
   role: roleEnum("role").notNull(),
+  company_id: uuid("company_id").references(() => companiesTable.id),
+  created_by_user_id: uuid("created_by_user_id"),
+  updated_by_user_id: uuid("updated_by_user_id"),
   created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -61,8 +78,12 @@ export const itemsTable = pgTable("items", {
   sku: varchar("sku", { length: 50 }).unique(), // optional, bisa dihapus kalau varian punya SKU sendiri
   unit: unitEnum("unit").default("pcs").notNull(),
 
-  created_user_uid: uuid("created_user_uid")
-    .references(() => usersTable.uid)
+  created_by_user_id: uuid("created_by_user_id")
+    .references(() => usersTable.id)
+    .notNull(),
+  updated_by_user_id: uuid("updated_by_user_id").references(() => usersTable.id),
+  company_id: uuid("company_id")
+    .references(() => companiesTable.id)
     .notNull(),
 
   created_at: timestamp("created_at").defaultNow().notNull(),
@@ -85,6 +106,8 @@ export const itemVariantsTable = pgTable("item_variants", {
   sku: varchar("sku", { length: 50 }).unique(),
   price: numeric("price", { precision: 12, scale: 2 }).default("0.00"),
   quantity: integer("quantity").default(0),
+  created_by_user_id: uuid("created_by_user_id").references(() => usersTable.id),
+  updated_by_user_id: uuid("updated_by_user_id").references(() => usersTable.id),
 
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
@@ -113,7 +136,11 @@ export const inventoryActivitiesTable = pgTable("inventory_activities", {
 
   description: text("description"),
 
-  created_user_uid: uuid("created_user_uid").references(() => usersTable.uid),
+  created_by_user_id: uuid("created_by_user_id").references(() => usersTable.id),
+  updated_by_user_id: uuid("updated_by_user_id").references(() => usersTable.id),
+  company_id: uuid("company_id")
+    .references(() => companiesTable.id)
+    .notNull(),
   created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -121,15 +148,49 @@ export type InventoryActivityCreateType = typeof inventoryActivitiesTable.$infer
 export type InventoryActivityType = typeof inventoryActivitiesTable.$inferSelect;
 
 // ========== RELATIONS ==========
-export const usersRelations = relations(usersTable, ({ many }) => ({
+export const companiesRelations = relations(companiesTable, ({ many, one }) => ({
+  users: many(usersTable),
   items: many(itemsTable),
   activities: many(inventoryActivitiesTable),
+  created_by: one(usersTable, {
+    fields: [companiesTable.created_by_user_id],
+    references: [usersTable.id],
+  }),
+  updated_by: one(usersTable, {
+    fields: [companiesTable.updated_by_user_id],
+    references: [usersTable.id],
+  }),
+}));
+
+export const usersRelations = relations(usersTable, ({ many, one }) => ({
+  items: many(itemsTable),
+  activities: many(inventoryActivitiesTable),
+  company: one(companiesTable, {
+    fields: [usersTable.company_id],
+    references: [companiesTable.id],
+  }),
+  created_by: one(usersTable, {
+    fields: [usersTable.created_by_user_id],
+    references: [usersTable.id],
+  }),
+  updated_by: one(usersTable, {
+    fields: [usersTable.updated_by_user_id],
+    references: [usersTable.id],
+  }),
 }));
 
 export const itemsRelations = relations(itemsTable, ({ many, one }) => ({
   created_by: one(usersTable, {
-    fields: [itemsTable.created_user_uid],
-    references: [usersTable.uid],
+    fields: [itemsTable.created_by_user_id],
+    references: [usersTable.id],
+  }),
+  updated_by: one(usersTable, {
+    fields: [itemsTable.updated_by_user_id],
+    references: [usersTable.id],
+  }),
+  company: one(companiesTable, {
+    fields: [itemsTable.company_id],
+    references: [companiesTable.id],
   }),
   variants: many(itemVariantsTable),
 }));
@@ -138,6 +199,14 @@ export const itemVariantsRelations = relations(itemVariantsTable, ({ one }) => (
   item: one(itemsTable, {
     fields: [itemVariantsTable.item_id],
     references: [itemsTable.id],
+  }),
+  created_by: one(usersTable, {
+    fields: [itemVariantsTable.created_by_user_id],
+    references: [usersTable.id],
+  }),
+  updated_by: one(usersTable, {
+    fields: [itemVariantsTable.updated_by_user_id],
+    references: [usersTable.id],
   }),
 }));
 
@@ -151,7 +220,15 @@ export const inventoryActivitiesRelations = relations(inventoryActivitiesTable, 
     references: [itemVariantsTable.id],
   }),
   created_by: one(usersTable, {
-    fields: [inventoryActivitiesTable.created_user_uid],
-    references: [usersTable.uid],
+    fields: [inventoryActivitiesTable.created_by_user_id],
+    references: [usersTable.id],
+  }),
+  updated_by: one(usersTable, {
+    fields: [inventoryActivitiesTable.updated_by_user_id],
+    references: [usersTable.id],
+  }),
+  company: one(companiesTable, {
+    fields: [inventoryActivitiesTable.company_id],
+    references: [companiesTable.id],
   }),
 }));

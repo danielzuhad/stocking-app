@@ -2,13 +2,17 @@ import { isAxiosError } from "axios";
 import { clsx, type ClassValue } from "clsx";
 import { toast } from "sonner";
 import { twMerge } from "tailwind-merge";
-import { ApiResponse } from "./axios";
+import { ApiResponse, HttpError } from "./axios";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
 export function handleErrorMessage(error: unknown, fallback = "Something went wrong"): string {
+  if (error instanceof HttpError) {
+    return error.message || fallback;
+  }
+
   if (isAxiosError(error)) {
     const data = error.response?.data as Partial<ApiResponse<unknown>> | undefined;
     if (typeof data?.message === "string") {
@@ -55,4 +59,13 @@ export function getValidEnumValue<T extends readonly string[]>(
   return (enumObj.enumValues as readonly string[]).includes(value ?? "")
     ? (value as T[number])
     : null;
+}
+
+export function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
 }

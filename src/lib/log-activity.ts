@@ -1,23 +1,23 @@
 // src/lib/logActivity.ts
-import { inventoryActivitiesTable } from "@/schema";
+import * as schema from "@/schema";
 import { ExtractTablesWithRelations, InferInsertModel } from "drizzle-orm";
 import { NeonHttpQueryResultHKT } from "drizzle-orm/neon-http";
 import { PgTransaction } from "drizzle-orm/pg-core";
 
 type LogActivityInput = Omit<
-  InferInsertModel<typeof inventoryActivitiesTable>,
+  InferInsertModel<typeof schema.inventoryActivitiesTable>,
   "id" | "created_at"
 >;
 
 export async function logActivity(
   tx: PgTransaction<
     NeonHttpQueryResultHKT,
-    typeof import("d:/Projects/next-js/stocking-app/src/schema"),
-    ExtractTablesWithRelations<typeof import("d:/Projects/next-js/stocking-app/src/schema")>
+    typeof schema,
+    ExtractTablesWithRelations<typeof schema>
   >,
   data: LogActivityInput
 ) {
-  return tx.insert(inventoryActivitiesTable).values({
+  return tx.insert(schema.inventoryActivitiesTable).values({
     ...data,
     created_at: new Date(),
   });

@@ -1,30 +1,46 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
 
-interface DataTablePaginationProps {
+export type PaginationMeta = {
   page: number;
   pageCount: number;
   pageSize: number;
+  total?: number;
+};
+
+type DataTablePaginationProps = {
+  meta: PaginationMeta;
   pageSizeOptions: number[];
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   isLoading?: boolean;
   summary?: string;
-}
+};
 
 const DataTablePagination = ({
-  page,
-  pageCount,
-  pageSize,
+  meta,
   pageSizeOptions,
   onPageChange,
   onPageSizeChange,
   isLoading = false,
   summary,
 }: DataTablePaginationProps) => {
+  const { page, pageCount, pageSize, total } = meta;
   const canGoPrev = page > 1;
   const canGoNext = page < pageCount;
+
+  const resolvedSummary = useMemo(() => {
+    if (summary) return summary;
+    if (typeof total === "number") {
+      if (total === 0) return "Showing 0 results";
+      const start = (page - 1) * pageSize + 1;
+      const end = Math.min(total, page * pageSize);
+      return `Showing ${start}-${end} of ${total}`;
+    }
+    return `Page ${page} of ${Math.max(pageCount, 1)}`;
+  }, [summary, total, page, pageSize, pageCount]);
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -48,7 +64,7 @@ const DataTablePagination = ({
       </div>
 
       <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center">
-        {summary && <span>{summary}</span>}
+        {resolvedSummary && <span>{resolvedSummary}</span>}
         <div className="flex items-center gap-2">
           <span>Rows</span>
           <select

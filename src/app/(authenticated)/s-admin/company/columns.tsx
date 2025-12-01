@@ -1,6 +1,8 @@
+import { CompanyType } from "@/schema";
 import { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { CompanyListRecord } from "@/types/company";
+
+export type CompanyRow = Pick<CompanyType, "id" | "name" | "slug" | "created_at" | "updated_at">;
 
 const formatDate = (value: Date | string | null) => {
   if (!value) return "-";
@@ -9,7 +11,7 @@ const formatDate = (value: Date | string | null) => {
   return format(parsed, "dd MMM yyyy");
 };
 
-export const columns: ColumnDef<CompanyListRecord>[] = [
+export const columns: ColumnDef<CompanyRow>[] = [
   {
     accessorKey: "name",
     header: "Company",

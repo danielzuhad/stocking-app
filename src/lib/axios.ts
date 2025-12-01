@@ -22,12 +22,11 @@ export class HttpError extends Error {
 }
 
 // Prefer URL dari env, fallback ke localhost
-const API_URL = env?.data?.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-
-console.log("API_URL = ", API_URL);
+const API_URL =
+  env?.data?.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 const axiosInstance = axios.create({
-  baseURL: `${API_URL}/api`,
+  baseURL: `${API_URL.replace(/\/$/, "")}/api`,
   withCredentials: true,
 });
 

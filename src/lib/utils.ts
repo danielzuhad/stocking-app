@@ -69,3 +69,19 @@ export function slugify(value: string): string {
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
 }
+
+export const getFirstParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
+export const toNumberParam = (value: string | string[] | undefined) => {
+  const resolved = getFirstParam(value);
+  if (!resolved) return undefined;
+  const parsed = Number(resolved);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+export const parseNumber = (value: string | number | null | undefined) => {
+  if (value === null || typeof value === "undefined") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};

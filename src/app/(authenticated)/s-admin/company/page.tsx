@@ -1,36 +1,30 @@
 import ErrorPage from "@/components/shared/error-page";
 import LoadingPage from "@/components/shared/loading-page";
 import { HttpError } from "@/lib/axios";
-import { api } from "@/lib/axios-client";
-import { CompanyType } from "@/schema";
+import { QUERY_PARAM_KEY, decryptQueryParams } from "@/lib/query-crypto";
+import { getFirstParam, toNumberParam } from "@/lib/utils";
+import { getCompanies } from "@/server/companies";
 import { Suspense } from "react";
+import CompanyClient from "./client";
 
 const Company = async ({
   searchParams,
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) => {
-  const { page, pageSize, search } = await searchParams;
-
+  const encryptedToken = getFirstParam(searchParams[QUERY_PARAM_KEY]);
+  const decrypted = await decryptQueryParams(encryptedToken);
   const params = {
-    page: typeof page === "string" ? page : null,
-    pageSize: typeof pageSize === "string" ? pageSize : null,
-    search: typeof search === "string" ? search : null,
+    page: decrypted.page ?? toNumberParam(searchParams.page),
+    pageSize: decrypted.pageSize ?? toNumberParam(searchParams.pageSize),
+    search: decrypted.search ?? getFirstParam(searchParams.search) ?? undefined,
   };
 
   try {
-    const { data: companies } = await api<CompanyType[], typeof params>("/master/companies", {
-      method: "GET",
-      params,
-    });
+    const data = await getCompanies(params);
 
-    return (
-      <div className="space-y-6">
-        <p>normal render companies di sini</p>
-      </div>
-    );
+    return <CompanyClient data={data} />;
   } catch (error) {
-    console.log({ error });
     const err = error as HttpError;
 
     return (

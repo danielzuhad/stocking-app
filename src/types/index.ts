@@ -2,14 +2,12 @@ import { roleEnum } from "@/schema";
 
 export type EUserRole = (typeof roleEnum.enumValues)[number];
 
-export type Table<T> = {
+export type TableType<T> = {
   items: T[];
-  meta: CompanyMeta;
+  meta: { page: number; pageSize: number; total: number; pageCount: number };
 };
 
-type CompanyMeta = {
-  page: number;
-  pageSize: number;
-  total: number;
-  pageCount: number;
+export type ParamsType = {
+  page?: number | null;
+  pageSize?: number | null;
 };

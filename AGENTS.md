@@ -330,6 +330,9 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Gunakan **Husky** untuk quality gate (mis. pre-commit lint, pre-push test).
   - Hooks harus cepat; jika test suite sudah besar, pindahkan test berat ke pre-push/CI.
   - Untuk docker/CI yang tidak punya `.git`, installer husky harus skip (lihat `scripts/husky-install.mjs`).
+  - Jika hooks tidak jalan:
+    - pastikan tidak commit dengan `--no-verify` dan env `HUSKY` bukan `0`
+    - cek `git config core.hooksPath` harus bernilai `.husky/_` (kalau kosong, jalankan `bun install` atau `bun run prepare`)
   - Install: `bun add -d husky`
 
 ## Don’t

@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -9,8 +9,23 @@ if (!existsSync(gitDir)) {
 }
 
 try {
-  execSync('husky install', { stdio: 'inherit' });
-} catch (error) {
-  console.warn('husky install failed (skipped):', error?.message ?? error);
-}
+  const hooksPathResult = spawnSync('git', ['config', '--get', 'core.hooksPath'], {
+    encoding: 'utf8',
+  });
 
+  if (hooksPathResult.status === 0 && hooksPathResult.stdout.trim() === '.husky/_') {
+    process.exit(0);
+  }
+
+  if (!existsSync(path.join(process.cwd(), 'node_modules', 'husky'))) {
+    process.exit(0);
+  }
+
+  const { default: husky } = await import('husky');
+  const output = husky();
+  if (typeof output === 'string' && output.trim().length > 0) {
+    console.log(output.trim());
+  }
+} catch (error) {
+  console.warn('husky setup failed (skipped):', error?.message ?? error);
+}

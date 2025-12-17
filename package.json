@@ -11,6 +11,7 @@
     "test:watch": "jest --watch",
     "test:ci": "jest --ci",
     "test:coverage": "jest --coverage",
+    "postinstall": "node scripts/husky-install.mjs",
     "prepare": "node scripts/husky-install.mjs"
   },
   "dependencies": {

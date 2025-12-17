@@ -28,8 +28,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.variable} ${geistMono.variable} font-sans antialiased`}
+        className={`${inter.variable} ${geistMono.variable} bg-background min-h-screen font-sans antialiased`}
       >
+        <div className="pointer-events-none fixed inset-0 -z-10">
+          <div className="from-primary/10 via-background to-background dark:from-primary/15 dark:via-background dark:to-background absolute inset-0 bg-linear-to-b" />
+          <div className="bg-primary/15 absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl" />
+          <div className="bg-primary/10 absolute right-0 -bottom-32 h-96 w-96 rounded-full blur-3xl" />
+        </div>
         <ThemeProvider>
           {children}
           <Toaster />

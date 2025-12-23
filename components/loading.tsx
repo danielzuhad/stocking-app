@@ -10,8 +10,8 @@ type LoadingProps = {
 };
 
 export default function LoadingPage({
-  title = 'Memuat halaman',
-  description = 'Mohon tunggu sebentar. Kami sedang menyiapkan konten.',
+  title = 'Loading page',
+  description = 'Please wait a moment. We are preparing the content.',
   className,
 }: LoadingProps) {
   return (

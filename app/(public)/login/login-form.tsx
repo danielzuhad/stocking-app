@@ -2,8 +2,11 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { EyeIcon, EyeOffIcon, LogInIcon } from 'lucide-react';
+import { signIn } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -18,6 +21,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 
+/** Validation schema for login form input. */
 const loginSchema = z.object({
   username: z.string().trim().min(1, 'Username wajib diisi'),
   password: z.string().min(1, 'Password wajib diisi'),
@@ -34,6 +38,8 @@ type SchemaType = z.infer<typeof loginSchema>;
  */
 export function LoginForm() {
   const [showPassword, setShowPassword] = React.useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const form = useForm<SchemaType>({
     resolver: zodResolver(loginSchema),
@@ -47,12 +53,30 @@ export function LoginForm() {
 
   const onSubmit = async (values: SchemaType) => {
     try {
-      const payload = {
-        ...values,
-      };
+      const callbackUrl = searchParams.get('callbackUrl') ?? '/';
 
-      console.log({ payload });
-    } catch {}
+      const result = await signIn('credentials', {
+        username: values.username,
+        password: values.password,
+        redirect: false,
+        callbackUrl,
+      });
+
+      if (!result) {
+        toast.error('Gagal memproses login. Coba lagi.');
+        return;
+      }
+
+      if (result.error) {
+        toast.error('Username atau password salah.');
+        return;
+      }
+
+      router.push(result.url ?? callbackUrl);
+      router.refresh();
+    } catch {
+      toast.error('Terjadi kesalahan. Coba lagi.');
+    }
   };
 
   return (

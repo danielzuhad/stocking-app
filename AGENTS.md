@@ -87,7 +87,13 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Validasi limit admin/staff harus transactional untuk mencegah race condition (cek jumlah user aktif per role + insert membership dalam 1 transaksi).
 - Product & variant:
   - `products` menyimpan atribut umum (nama, kategori, satuan, status).
-  - `product_variants` menyimpan kombinasi option (warna/ukuran/dll), `sku`, `barcode`, serta harga/diskon (boleh override).
+  - `product_variants` menyimpan kombinasi option (warna/ukuran/dll), `sku`, `barcode`, serta **harga jual** (dan diskon opsional) sebagai default saat transaksi.
+  - Pricing (MVP):
+    - Source of truth harga untuk transaksi ada di **variant** (cocok untuk fashion: ukuran/warna bisa beda harga).
+    - Untuk kategori yang tidak butuh beda harga per varian, gunakan **default variant** saja atau set semua varian dengan harga yang sama.
+    - Opsional: simpan “harga default” di `products` untuk prefill/inheritance saat membuat variant (variant boleh override).
+    - `sales_invoice_items` wajib menyimpan **snapshot harga** (`unitPrice`/diskon) pada saat `POSTED` agar histori/audit tidak berubah ketika harga variant diupdate.
+  - UX rule: CRUD product **tidak** menerima input stok; stok dibaca dari ledger dan perubahan stok harus lewat dokumen/aksi yang membuat `stock_movements`.
   - Produk tanpa varian tetap dibuat sebagai 1 **default variant** agar semua pergerakan stok konsisten di level variant.
 - Expiry (opsional, disarankan per lot/batch):
   - Tambahkan `inventory_lots` (lot number, `expiresAt` nullable) dan relasikan ke `product_variant`.
@@ -156,11 +162,12 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
 ## Drizzle + PostgreSQL (Self-hosted)
 
 - Simpan schema di folder yang jelas (mis. `db/schema/*`) dan gunakan migrations (drizzle-kit) untuk perubahan schema.
+- Naming DB: gunakan **snake_case** untuk nama table/column/enum/index **dan** key properti di definisi schema Drizzle (contoh: `company_id`, `created_at`, `password_hash`).
 - Untuk production, database berjalan di **VPS yang sama** dengan app (single VPS setup). Konsekuensinya: backup, security, dan monitoring menjadi tanggung jawab kita.
 - Semua operasi yang memengaruhi stok/transaksi harus **transactional** (gunakan transaksi Postgres).
 - Index yang wajib dipertimbangkan:
-  - `(companyId, createdAt)` untuk tabel event/log/transaksi
-  - `(companyId, productVariantId)` untuk movement dan detail transaksi
+  - `(company_id, created_at)` untuk tabel event/log/transaksi
+  - `(company_id, product_variant_id)` untuk movement dan detail transaksi
   - SKU unik per company bila SKU digunakan sebagai identifier
 - Hindari N+1: rancang query join/aggregation dengan benar, gunakan pagination pada list besar.
 - Security (wajib):
@@ -179,6 +186,13 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - **Server**: data fetching, DB access, ImageKit signing/upload, authorization, business logic.
   - **Client**: state UI, form interaksi, table sorting/filtering lokal.
 - Mutasi data: gunakan **server actions** untuk internal app; gunakan **route handlers** (`app/api/*`) bila butuh API eksternal.
+- Request guard: gunakan `proxy.ts` (Next.js terbaru; pengganti `middleware.ts`) untuk auth redirect/edge guard.
+- Struktur route: gunakan **route group** (mis. `app/(public)/*` dan `app/(dashboard)/*`) untuk memisahkan area publik vs authenticated tanpa mengubah URL.
+- Struktur folder saat menambah fitur (wajib konsisten):
+  - Public pages → `app/(public)/...`
+  - Authenticated pages → `app/(dashboard)/...`
+  - Route handler/API → `app/api/...`
+  - Code yang spesifik 1 route (UI/action/helper) → colocate di folder route tersebut; shared UI → `components/*`; shared server/domain/util → `lib/*` (server-only bila perlu); schema DB → `db/schema/*`; scripts/tooling → `scripts/*`; type augmentation → `types/*`.
 - Setelah mutasi, revalidate cache yang relevan (`revalidatePath` / `revalidateTag`) agar dashboard/list tetap konsisten.
 
 ## Readability, DRY, dan Maintainability
@@ -201,7 +215,11 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - perubahan proses bisnis: update `README.md`
   - perubahan pedoman teknikal/arsitektur: update `AGENTS.md`
 - Tulis komentar untuk menjelaskan **alasan/aturan bisnis** (why), bukan mengulang apa yang sudah jelas dari kode (what).
-- Untuk function penting (domain/service) yang diekspor, gunakan JSDoc singkat yang menjelaskan:
+- Wajib dokumentasi singkat untuk:
+  - **setiap exported function** (JSDoc 1–5 baris)
+  - **setiap exported const/variable penting** (config, guard, permission code, business rule, magic number) via JSDoc/komentar inline
+  - hal yang menyangkut security/tenant scope/audit harus jelas di doc
+- Untuk function/konstanta penting (domain/service/guard/config), gunakan JSDoc singkat yang menjelaskan:
   - tujuan, input/output, dan error yang mungkin terjadi
   - permission yang dibutuhkan (jika terkait auth)
   - tenant scope (`activeCompanyId`) dan invariants (mis. “no minus stock”)
@@ -266,7 +284,8 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Validasi di client hanya untuk UX; server tetap wajib validasi ulang sebelum mutasi DB.
   - Install: `bun add react-hook-form @hookform/resolvers`
 - Typed env (typesafe akses env):
-  - Hindari akses `process.env.*` langsung di banyak file. Buat modul tunggal (mis. `env.ts`) yang mem-parse env sekali dan mengekspor `env` yang typed.
+  - Wajib akses env via modul tunggal `env.ts` (gunakan `import { env } from '@/env'`); hindari akses `process.env.*` langsung di file lain (kecuali tooling/config CLI seperti `drizzle.config.ts`).
+  - Jangan import env server (secret) ke Client Component; untuk env client gunakan `NEXT_PUBLIC_*` dan definisikan di bagian `client` pada `createEnv`.
   - Disarankan pakai `@t3-oss/env-nextjs` + `zod` agar beda env server/client jelas (ingat `NEXT_PUBLIC_*` untuk client).
   - Install: `bun add @t3-oss/env-nextjs`
   - Pattern (contoh ringkas):
@@ -285,9 +304,13 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
         DATABASE_URL: process.env.DATABASE_URL,
         AUTH_SECRET: process.env.AUTH_SECRET,
       },
+      emptyStringAsUndefined: true,
     });
     ```
 
+- Server actions (standarisasi response):
+  - Jangan `throw` untuk error yang diharapkan; kembalikan response yang konsisten dan typesafe.
+  - Gunakan `ActionResult<T>` dari `lib/actions/result.ts` (pattern: `{ ok: true, data }` atau `{ ok: false, error: { code, message, field_errors? } }`).
 - Error message untuk user harus aman (tidak membocorkan detail DB/stack).
 - Log event penting untuk audit (bukan sekadar `console.log`).
 

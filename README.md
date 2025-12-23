@@ -47,8 +47,11 @@ Aplikasi manajemen stok multi-perusahaan (multi-tenant) untuk berbagai jenis pro
 - Foto produk di-host lewat **ImageKit**; aplikasi menyimpan metadata/URL yang diperlukan.
 - Produk bisa punya **Variant** (opsional) untuk kombinasi seperti warna/ukuran, dst:
   - SKU/Barcode disarankan di level **variant** (lebih fleksibel), dengan opsi fallback ke level product untuk produk tanpa varian.
-  - Harga & diskon (opsional) bisa di level product atau override di level variant.
+  - **Pricing (MVP)**: harga jual disimpan di level **variant** (karena untuk fashion ukuran/warna bisa beda harga). Untuk produk yang tidak butuh varian/harganya sama, cukup pakai **default variant** atau biarkan semua variant memakai harga yang sama.
+  - Opsional: product boleh punya “harga default” untuk memudahkan input (prefill) dan diwariskan ke variant (variant bisa override jika perlu).
 - Default rule (MVP): stok dicatat di level **variant**. Produk tanpa varian diperlakukan sebagai 1 **default variant**.
+- **UX rule**: form product fokus ke master data; **stok tidak diinput di form product**. Stok ditampilkan read-only dan perubahan stok dilakukan lewat dokumen/aksi `Receiving`, `Adjustment`, `Opname`, `Invoice`, `Return` (ledger).
+- **Audit rule**: saat `POSTED`, item invoice menyimpan **snapshot harga** yang dipakai saat transaksi (agar histori tidak berubah ketika harga variant diubah).
 - Expiry (opsional): produk tertentu (mis. F&B/kosmetik) bisa mengaktifkan tracking expiry (lihat bagian “Expiry” di bawah).
 
 ### 3) Manajemen Stok (Stock Ledger)

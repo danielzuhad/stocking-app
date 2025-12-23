@@ -1,9 +1,37 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { LoginForm } from '@/app/login/login-form';
+import { LoginForm } from '@/app/(public)/login/login-form';
+
+const pushMock = jest.fn();
+const refreshMock = jest.fn();
+const signInMock = jest.fn();
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: pushMock,
+    refresh: refreshMock,
+  }),
+  useSearchParams: () => ({
+    get: () => null,
+  }),
+}));
+
+jest.mock('next-auth/react', () => ({
+  signIn: (...args: unknown[]) => signInMock(...args),
+}));
+
+jest.mock('sonner', () => ({
+  toast: {
+    error: jest.fn(),
+  },
+}));
 
 describe('LoginForm', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('renders username and password fields', () => {
     render(<LoginForm />);
 
@@ -40,9 +68,12 @@ describe('LoginForm', () => {
 
   it('submits when values are provided', async () => {
     const user = userEvent.setup();
-    const consoleSpy = jest
-      .spyOn(console, 'log')
-      .mockImplementation(() => undefined);
+    signInMock.mockResolvedValue({
+      error: null,
+      ok: true,
+      status: 200,
+      url: '/dashboard',
+    });
 
     render(<LoginForm />);
 
@@ -51,9 +82,13 @@ describe('LoginForm', () => {
     await user.click(screen.getByRole('button', { name: 'Masuk' }));
 
     await waitFor(() => {
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(signInMock).toHaveBeenCalledWith('credentials', {
+        username: 'admin',
+        password: 'password',
+        redirect: false,
+        callbackUrl: '/',
+      });
+      expect(pushMock).toHaveBeenCalledWith('/dashboard');
     });
-
-    consoleSpy.mockRestore();
   });
 });

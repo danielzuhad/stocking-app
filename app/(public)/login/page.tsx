@@ -1,4 +1,4 @@
-import { LoginForm } from '@/app/login/login-form';
+import { LoginForm } from './login-form';
 import {
   Building2,
   FileDown,
@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { Metadata } from 'next';
 
+/** Page metadata for `/login`. */
 export const metadata: Metadata = {
   title: 'Masuk • Stockly',
 };

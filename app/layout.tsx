@@ -1,3 +1,4 @@
+import { AuthSessionProvider } from '@/components/provider/session';
 import { ThemeProvider } from '@/components/provider/theme';
 import { Toaster } from '@/components/ui/sonner';
 import type { Metadata } from 'next';
@@ -36,8 +37,10 @@ export default function RootLayout({
           <div className="bg-primary/10 absolute right-0 -bottom-32 h-96 w-96 rounded-full blur-3xl" />
         </div>
         <ThemeProvider>
-          {children}
-          <Toaster />
+          <AuthSessionProvider>
+            {children}
+            <Toaster />
+          </AuthSessionProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -18,7 +18,7 @@ const setImpersonationSchema = z.object({
  * Audit + validation for setting superadmin impersonation.
  *
  * The actual `active_company_id` is stored in the JWT (via `useSession().update()`),
- * so middleware can enforce tenant scope without DB access.
+ * so `proxy.ts` can enforce tenant scope without DB access.
  */
 export async function auditSuperadminImpersonation(
   input: z.infer<typeof setImpersonationSchema>,

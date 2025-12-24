@@ -36,10 +36,25 @@ export default function RootLayout({
           <div className="bg-primary/15 absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl" />
           <div className="bg-primary/10 absolute right-0 -bottom-32 h-96 w-96 rounded-full blur-3xl" />
         </div>
-        <ThemeProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
           <AuthSessionProvider>
             {children}
-            <Toaster />
+            <Toaster
+              closeButton
+              toastOptions={{
+                classNames: {
+                  success: '!bg-primary !text-primary-foreground !border-0',
+                  warning: '!bg-accent !text-accent-foreground !border-0',
+                  error: '!bg-destructive !text-primary-foreground !border-0',
+                  closeButton: '!bg-background !text-foreground !border-border',
+                },
+              }}
+            />
           </AuthSessionProvider>
         </ThemeProvider>
       </body>

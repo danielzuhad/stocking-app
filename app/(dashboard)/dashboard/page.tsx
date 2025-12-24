@@ -7,11 +7,11 @@ import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
 
 import { CompanySwitcher } from './company-switcher';
-import { SignOutButton } from './sign-out-button';
 
 /** Dashboard landing page (superadmin can set impersonation). */
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
+  console.log({ session });
   if (!session) redirect('/login');
 
   const companyRows =
@@ -38,7 +38,6 @@ export default async function DashboardPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle>Dashboard</CardTitle>
-          <SignOutButton />
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div>

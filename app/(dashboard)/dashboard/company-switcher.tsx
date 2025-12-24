@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   auditClearSuperadminImpersonation,
   auditSuperadminImpersonation,
-} from './actions';
+} from '../actions/impersonation';
 
 /** Minimal company shape for the impersonation list. */
 type CompanyRow = {

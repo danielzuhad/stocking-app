@@ -193,6 +193,16 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Authenticated pages → `app/(dashboard)/...`
   - Route handler/API → `app/api/...`
   - Code yang spesifik 1 route (UI/action/helper) → colocate di folder route tersebut; shared UI → `components/*`; shared server/domain/util → `lib/*` (server-only bila perlu); schema DB → `db/schema/*`; scripts/tooling → `scripts/*`; type augmentation → `types/*`.
+- Route segment boundary (opsional, gunakan bila perlu):
+  - Jangan buat `loading.tsx` / `error.tsx` / `not-found.tsx` untuk **setiap page** (overkill). Default: taruh di level **route group/fitur** jika UX/handling memang berbeda.
+  - Rekomendasi baseline:
+    - `app/not-found.tsx` untuk 404 global (dan/atau `app/(dashboard)/not-found.tsx` bila ingin 404 khusus dashboard).
+    - `app/(dashboard)/loading.tsx` untuk skeleton area dashboard saat segment fetch/stream.
+    - `app/(dashboard)/error.tsx` untuk error boundary dashboard (UI “Coba lagi” via `reset()`).
+  - Catatan:
+    - `error.tsx` wajib Client Component (`'use client'`).
+    - `loading.tsx` dan `not-found.tsx` default Server Component.
+    - Untuk error di root layout (rare), pertimbangkan `app/global-error.tsx` (harus render `<html>` + `<body>`).
 - Setelah mutasi, revalidate cache yang relevan (`revalidatePath` / `revalidateTag`) agar dashboard/list tetap konsisten.
 
 ## Readability, DRY, dan Maintainability
@@ -312,6 +322,9 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Jangan `throw` untuk error yang diharapkan; kembalikan response yang konsisten dan typesafe.
   - Gunakan `ActionResult<T>` dari `lib/actions/result.ts` (pattern: `{ ok: true, data }` atau `{ ok: false, error: { code, message, field_errors? } }`).
 - Error message untuk user harus aman (tidak membocorkan detail DB/stack).
+- Standardisasi error UI:
+  - **Expected error** (validasi/permission/not-found) → render state UI biasa (pakai `ActionResult`), jangan lempar error.
+  - **Unexpected error** (infra/bug/DB down) → biarkan kena `error.tsx`; tampilkan pesan aman + “Kode” (`digest`) untuk user, dan tampilkan detail troubleshooting hanya untuk developer/superadmin (harus disanitize).
 - Log event penting untuk audit (bukan sekadar `console.log`).
 
 ## Performance & UX

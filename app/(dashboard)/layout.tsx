@@ -1,17 +1,41 @@
+import { authOptions } from '@/auth';
+import { getServerSession } from 'next-auth/next';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+
+import { DashboardShell } from './_components/dashboard-shell';
+
+const SIDEBAR_STATE_COOKIE = 'sidebar_state';
+
 /**
- * Layout wrapper for authenticated app pages (dashboard area).
+ * Authenticated app layout (Sidebar + Topbar).
  *
- * This keeps consistent spacing without changing the URL structure
- * (route group folders like `(dashboard)` are ignored by Next.js routing).
+ * Notes:
+ * - Folder `(dashboard)` is a route group, so URLs stay the same.
+ * - Sidebar open/closed state is persisted via `sidebar_state` cookie (shadcn Sidebar).
  */
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await getServerSession(authOptions);
+  if (!session) redirect('/login');
+
+  const cookieStore = await cookies();
+  const default_sidebar_open =
+    cookieStore.get(SIDEBAR_STATE_COOKIE)?.value !== 'false';
+
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+    <DashboardShell
+      default_sidebar_open={default_sidebar_open}
+      user={{
+        username: session.user.username,
+        system_role: session.user.system_role,
+      }}
+      active_company_id={session.active_company_id}
+    >
       {children}
-    </div>
+    </DashboardShell>
   );
 }

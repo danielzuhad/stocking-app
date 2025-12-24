@@ -61,6 +61,6 @@ Dokumen ini menyimpan hasil diskusi awal terkait struktur navigasi dan layout da
 
 ## Next Steps (Implementasi)
 
-- [ ] Buat `app/(dashboard)/layout.tsx` (atau route group sejenis) untuk wrapper sidebar+topbar.
-- [ ] Siapkan komponen `Sidebar`, `Topbar`, `Breadcrumbs`, dan `CommandPalette` (opsional).
+- [x] Buat `app/(dashboard)/layout.tsx` (route group) untuk wrapper sidebar+topbar.
+- [x] Siapkan komponen `Sidebar` + `Topbar` (breadcrumb & command palette menyusul bila dibutuhkan).
 - [ ] Tentukan layout khusus untuk halaman tabel lebar (ledger/report) vs halaman form/detail.

@@ -9,34 +9,17 @@ import { serializeCreatedAt } from '@/lib/activity/logs.data-table';
 import type { SystemLogRow } from '@/lib/activity/types';
 import { requireSuperadminSession } from '@/lib/auth/guards';
 import { buildDataTableIlikeSearch } from '@/lib/data-table/drizzle';
+import {
+  DEFAULT_PAGE_SIZE_OPTIONS,
+  getDataTableSearchParams,
+  parsePageIndex,
+  parsePageSize,
+  type PageSearchParams,
+} from '@/lib/data-table/page-params';
 
 import { SystemLogsTable } from './system-logs-table';
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const URL_STATE_KEY = 'dt_system_logs';
-
-type PageSearchParams = Record<string, string | string[] | undefined>;
-
-function getParam(searchParams: PageSearchParams, key: string): string | null {
-  const value = searchParams[key];
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value ?? null;
-}
-
-function parsePageSize(value: string | null, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  if (!PAGE_SIZE_OPTIONS.includes(parsed)) return fallback;
-  return parsed;
-}
-
-function parsePageIndex(value: string | null): number {
-  if (!value) return 0;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return Math.floor(parsed) - 1;
-}
 
 /** Superadmin-only global logs (cross-company). */
 export default async function SystemLogsPage({
@@ -48,19 +31,20 @@ export default async function SystemLogsPage({
   const sessionResult = await requireSuperadminSession();
   if (!sessionResult.ok) {
     return (
-      <EmptyState title="System Logs" description={sessionResult.error.message} />
+      <EmptyState
+        title="System Logs"
+        description={sessionResult.error.message}
+      />
     );
   }
 
-  const pageParam = getParam(resolvedSearchParams, `${URL_STATE_KEY}_page`);
-  const pageSizeParam = getParam(
+  const { pageParam, pageSizeParam, searchParam } = getDataTableSearchParams(
     resolvedSearchParams,
-    `${URL_STATE_KEY}_pageSize`,
+    URL_STATE_KEY,
   );
-  const searchParam = getParam(resolvedSearchParams, `${URL_STATE_KEY}_q`) ?? '';
 
   const pageIndex = parsePageIndex(pageParam);
-  const pageSize = parsePageSize(pageSizeParam, PAGE_SIZE_OPTIONS[0]);
+  const pageSize = parsePageSize(pageSizeParam, DEFAULT_PAGE_SIZE_OPTIONS[0]);
   const search = searchParam.trim();
 
   const searchWhere = buildDataTableIlikeSearch(search, [

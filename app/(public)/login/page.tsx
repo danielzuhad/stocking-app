@@ -1,6 +1,4 @@
-import { LoginForm } from './login-form';
 import {
-  Building2,
   FileDown,
   Package,
   ReceiptText,
@@ -8,6 +6,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { Metadata } from 'next';
+import Image from 'next/image';
+import { LoginForm } from './login-form';
 
 /** Page metadata for `/login`. */
 export const metadata: Metadata = {
@@ -54,9 +54,31 @@ export default function LoginPage() {
                 </span>
               </div>
 
-              <h1 className="mt-5 text-5xl font-semibold tracking-tight">
-                Stockly
-              </h1>
+              <div className="mt-5 flex items-center gap-2">
+                <div
+                  className={[
+                    'relative grid shrink-0 place-items-center overflow-hidden rounded-full',
+                    'border border-white/25 bg-white/35 shadow-sm backdrop-blur-xl',
+                    'size-11 sm:size-12 md:size-13 dark:border-white/10 dark:bg-white/5',
+                  ].join(' ')}
+                >
+                  {/* glass highlight */}
+                  <span className="pointer-events-none absolute inset-0 rounded-full bg-linear-to-b from-white/35 via-white/10 to-transparent dark:from-white/10" />
+
+                  <Image
+                    alt="stockly-logo"
+                    src="/assets/logo.svg"
+                    fill
+                    priority
+                    sizes="64px"
+                    className="relative scale-[1.28] object-contain dark:invert"
+                  />
+                </div>
+
+                <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+                  Stockly
+                </h1>
+              </div>
               <p className="text-muted-foreground mt-3 max-w-lg text-base leading-relaxed">
                 Kelola stok tanpa ribet—catat barang masuk/keluar, opname,
                 retur, sampai laporan. Semuanya rapi, siap diaudit.
@@ -114,23 +136,38 @@ export default function LoginPage() {
 
           {/* Right / Form */}
           <div className="mx-auto w-full max-w-md">
-            {/* Mobile header */}
-            <div className="mb-6 lg:hidden">
-              <div className="relative inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm shadow-[0_8px_30px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
-                <div className="pointer-events-none absolute inset-0 rounded-full bg-linear-to-b from-white/20 via-white/5 to-transparent dark:from-white/10" />
-                <Building2 className="text-primary relative h-4 w-4" />
-                <span className="text-muted-foreground relative">
-                  Inventory + invoice untuk multi outlet
-                </span>
-              </div>
+            <div className="mb-3 lg:hidden">
+              {/* brand row */}
+              <div className="flex items-center gap-3">
+                <div
+                  className={[
+                    'relative grid shrink-0 place-items-center overflow-hidden rounded-full',
+                    'border border-white/25 bg-white/35 shadow-sm backdrop-blur-xl',
+                    'size-10 dark:border-white/10 dark:bg-white/5',
+                  ].join(' ')}
+                >
+                  {/* glass highlight */}
+                  <span className="pointer-events-none absolute inset-0 rounded-full bg-linear-to-b from-white/35 via-white/10 to-transparent dark:from-white/10" />
 
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-                Stockly
-              </h1>
-              <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-                Masuk untuk kelola stok, opname, retur, dan laporan—semua rapi &
-                siap diaudit.
-              </p>
+                  <Image
+                    alt="stockly-logo"
+                    src="/assets/logo.svg"
+                    fill
+                    priority
+                    sizes="64px"
+                    className="relative scale-[1.28] object-contain dark:invert"
+                  />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-semibold tracking-tight">
+                    Stockly
+                  </h1>
+                  <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                    Masuk untuk kelola stok, opname, retur, dan laporan—semua
+                    rapi & siap diaudit.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <LoginForm />

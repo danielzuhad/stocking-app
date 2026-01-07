@@ -1,13 +1,8 @@
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { EmptyState } from '@/components/ui/empty-state';
 
 /** Placeholder page for Products module. */
 export default function ProductsPage() {
   return (
-    <Empty>
-      <EmptyHeader>
-        <EmptyTitle>Products</EmptyTitle>
-        <EmptyDescription>Coming soon: CRUD product + variant.</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+    <EmptyState title="Products" description="Coming soon: CRUD product + variant." />
   );
 }

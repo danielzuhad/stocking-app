@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -23,11 +23,14 @@ export default function DashboardError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const router = useRouter();
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [isPending, startTransition] = React.useTransition();
 
   const isSuperadmin = session?.user.system_role === 'SUPERADMIN';
-  const showDeveloperDetails = isSuperadmin || process.env.NODE_ENV !== 'production';
+  const showDeveloperDetails =
+    isSuperadmin || process.env.NODE_ENV !== 'production';
 
   const presentation = React.useMemo(
     () =>
@@ -60,7 +63,19 @@ export default function DashboardError({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => reset()}>Coba lagi</Button>
+          {/* <Button
+            isLoading={isPending}
+            loadingText="Mencoba lagi..."
+            className="w-fit shrink-0 whitespace-nowrap"
+            onClick={() => {
+              startTransition(() => {
+                reset();
+                router.refresh();
+              });
+            }}
+          >
+            Coba lagi
+          </Button> */}
           <Button variant="outline" asChild>
             <Link href="/dashboard">Ke dashboard</Link>
           </Button>
@@ -70,7 +85,7 @@ export default function DashboardError({
           <>
             <Separator />
             <details className="text-sm">
-              <summary className="cursor-pointer select-none font-medium">
+              <summary className="cursor-pointer font-medium select-none">
                 Developer details
               </summary>
               <div className="mt-3 space-y-3 text-xs">

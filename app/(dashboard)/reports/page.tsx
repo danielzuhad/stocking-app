@@ -1,13 +1,11 @@
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { EmptyState } from '@/components/ui/empty-state';
 
 /** Placeholder page for Reports module. */
 export default function ReportsPage() {
   return (
-    <Empty>
-      <EmptyHeader>
-        <EmptyTitle>Reports</EmptyTitle>
-        <EmptyDescription>Coming soon: dashboard reports + export CSV/PDF.</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+    <EmptyState
+      title="Reports"
+      description="Coming soon: dashboard reports + export CSV/PDF."
+    />
   );
 }

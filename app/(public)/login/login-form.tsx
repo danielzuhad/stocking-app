@@ -9,6 +9,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
+import { getLoginErrorMessage } from '@/lib/auth/errors';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -68,7 +69,7 @@ export function LoginForm() {
       }
 
       if (result.error) {
-        toast.error('Username atau password salah.');
+        toast.error(getLoginErrorMessage(result.error));
         return;
       }
 

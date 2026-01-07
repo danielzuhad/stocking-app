@@ -5,8 +5,11 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import { z } from 'zod';
 
 import { db } from '@/db';
-import { activityLogs, memberships, users } from '@/db/schema';
+import { memberships, users } from '@/db/schema';
 import { env } from '@/env';
+import { logActivity } from '@/lib/activity/log';
+import { AUTH_ERROR } from '@/lib/auth/errors';
+import { getErrorPresentation } from '@/lib/errors/presentation';
 
 const credentialsSchema = z.object({
   username: z.string().trim().min(1),
@@ -61,23 +64,62 @@ export const authOptions: NextAuthOptions = {
         const parsed = credentialsSchema.safeParse(rawCredentials);
         if (!parsed.success) return null;
 
-        const { username, password } = parsed.data;
+        try {
+          const { username, password } = parsed.data;
 
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.username, username))
-          .limit(1);
+          const [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.username, username))
+            .limit(1);
 
-        if (!user) {
-          await sleep(350);
-          return null;
-        }
+          if (!user) {
+            await sleep(350);
+            return null;
+          }
 
-        const passwordOk = await compare(password, user.password_hash);
-        if (!passwordOk) {
+          const passwordOk = await compare(password, user.password_hash);
+          if (!passwordOk) {
+            const [membership] = await db
+              .select({ company_id: memberships.company_id })
+              .from(memberships)
+              .where(
+                and(
+                  eq(memberships.user_id, user.id),
+                  eq(memberships.status, 'ACTIVE'),
+                ),
+              )
+              .limit(1);
+
+            if (membership) {
+              await logActivity(db, {
+                company_id: membership.company_id,
+                actor_user_id: user.id,
+                action: 'auth.login_failed',
+                meta: { reason: 'invalid_password' },
+              });
+            }
+
+            await sleep(350);
+            return null;
+          }
+
+          if (user.system_role === 'SUPERADMIN') {
+            return {
+              id: user.id,
+              name: user.username,
+              username: user.username,
+              system_role: 'SUPERADMIN',
+              membership_role: null,
+              active_company_id: null,
+            } satisfies AuthUser;
+          }
+
           const [membership] = await db
-            .select({ company_id: memberships.company_id })
+            .select({
+              company_id: memberships.company_id,
+              role: memberships.role,
+            })
             .from(memberships)
             .where(
               and(
@@ -87,63 +129,30 @@ export const authOptions: NextAuthOptions = {
             )
             .limit(1);
 
-          if (membership) {
-            await db.insert(activityLogs).values({
-              company_id: membership.company_id,
-              actor_user_id: user.id,
-              action: 'auth.login_failed',
-              meta: { reason: 'invalid_password' },
-            });
+          if (!membership) {
+            await sleep(350);
+            return null;
           }
 
-          await sleep(350);
-          return null;
-        }
+          await logActivity(db, {
+            company_id: membership.company_id,
+            actor_user_id: user.id,
+            action: 'auth.login_success',
+          });
 
-        if (user.system_role === 'SUPERADMIN') {
           return {
             id: user.id,
             name: user.username,
             username: user.username,
-            system_role: 'SUPERADMIN',
-            membership_role: null,
-            active_company_id: null,
+            system_role: user.system_role,
+            membership_role: membership.role,
+            active_company_id: membership.company_id,
           } satisfies AuthUser;
+        } catch (error) {
+          const presentation = getErrorPresentation({ error });
+          console.error('AUTH_AUTHORIZE_ERROR', presentation.developer);
+          throw new Error(AUTH_ERROR.SERVICE_UNAVAILABLE);
         }
-
-        const [membership] = await db
-          .select({
-            company_id: memberships.company_id,
-            role: memberships.role,
-          })
-          .from(memberships)
-          .where(
-            and(
-              eq(memberships.user_id, user.id),
-              eq(memberships.status, 'ACTIVE'),
-            ),
-          )
-          .limit(1);
-
-        if (!membership) {
-          await sleep(350);
-          return null;
-        }
-
-        await db.insert(activityLogs).values({
-          company_id: membership.company_id,
-          actor_user_id: user.id,
-          action: 'auth.login_success',
-        });
-
-        return {
-          id: user.id,
-          name: user.username,
-          username: user.username,
-          system_role: user.system_role,
-          membership_role: membership.role,
-          active_company_id: membership.company_id,
-        } satisfies AuthUser;
       },
     }),
   ],

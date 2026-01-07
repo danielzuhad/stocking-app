@@ -1,13 +1,7 @@
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from '@/components/ui/empty';
+import { EmptyState } from '@/components/ui/empty-state';
 
 /**
  * Dashboard-scoped 404 UI.
@@ -16,18 +10,13 @@ import {
  */
 export default function DashboardNotFound() {
   return (
-    <Empty>
-      <EmptyHeader>
-        <EmptyTitle>Halaman tidak ditemukan</EmptyTitle>
-        <EmptyDescription>
-          URL yang kamu buka tidak ada atau sudah dipindahkan.
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent>
-        <Button asChild>
-          <Link href="/dashboard">Kembali ke dashboard</Link>
-        </Button>
-      </EmptyContent>
-    </Empty>
+    <EmptyState
+      title="Halaman tidak ditemukan"
+      description="URL yang kamu buka tidak ada atau sudah dipindahkan."
+    >
+      <Button asChild>
+        <Link href="/dashboard">Kembali ke dashboard</Link>
+      </Button>
+    </EmptyState>
   );
 }

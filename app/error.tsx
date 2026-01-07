@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
 import { Button } from '@/components/ui/button';
@@ -22,8 +22,10 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const router = useRouter();
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [isPending, startTransition] = React.useTransition();
 
   const isSuperadmin = session?.user.system_role === 'SUPERADMIN';
   const showDeveloperDetails =
@@ -61,7 +63,18 @@ export default function GlobalError({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => reset()}>Coba lagi</Button>
+            <Button
+              isLoading={isPending}
+              loadingText="Mencoba lagi..."
+              onClick={() => {
+                startTransition(() => {
+                  reset();
+                  router.refresh();
+                });
+              }}
+            >
+              Coba lagi
+            </Button>
             <Button variant="outline" asChild>
               <Link href="/dashboard">Ke dashboard</Link>
             </Button>

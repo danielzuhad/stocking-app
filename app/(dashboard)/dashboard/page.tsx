@@ -6,29 +6,30 @@ import { desc } from 'drizzle-orm';
 import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
 
+import { handleIsSuperAdmin } from '@/lib/utils';
 import { CompanySwitcher } from './company-switcher';
 
 /** Dashboard landing page (superadmin can set impersonation). */
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
-  console.log({ session });
   if (!session) redirect('/login');
 
-  const companyRows =
-    session.user.system_role === 'SUPERADMIN'
-      ? await db
-          .select({
-            id: companies.id,
-            name: companies.name,
-            slug: companies.slug,
-          })
-          .from(companies)
-          .orderBy(desc(companies.created_at))
-      : [];
+  const isSuperAdmin = handleIsSuperAdmin(session);
+
+  const companyRows = isSuperAdmin
+    ? await db
+        .select({
+          id: companies.id,
+          name: companies.name,
+          slug: companies.slug,
+        })
+        .from(companies)
+        .orderBy(desc(companies.created_at))
+    : [];
 
   return (
     <div className="space-y-6">
-      {session.user.system_role === 'SUPERADMIN' ? (
+      {isSuperAdmin ? (
         <CompanySwitcher
           companies={companyRows}
           active_company_id={session.active_company_id}

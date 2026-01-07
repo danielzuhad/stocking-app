@@ -214,10 +214,16 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Query DB di modul terpusat (hindari query “nyebar” di banyak file tanpa pola).
 - DRY dengan bijak (hindari over-abstraction):
   - Terapkan “rule of three”: baru ekstrak helper/shared code setelah pola duplikasi muncul berulang.
-  - Buat util terpusat untuk hal-hal wajib seperti `requireAuth`, `requireCompanyScope`, dan `logActivity`.
+  - Buat util terpusat untuk hal-hal wajib seperti auth guard + tenant scope + audit log:
+    - `requireAuthSession()` / `requireCompanyScope()` di `lib/auth/guards.ts`
+    - `logActivity()` di `lib/activity/log.ts` (append-only ke `activity_logs`)
+  - Untuk helper kecil yang sifatnya generic dan kepakai lintas fitur (mis. formatter date/time), taruh di `lib/utils.ts` dan reuse (hindari copy-paste antar page).
 - Konsistensi tipe:
   - Definisikan tipe domain/DTO yang jelas; jangan bocorkan bentuk row DB mentah ke UI tanpa mapping yang disengaja.
   - Hindari `any`; prefer tipe eksplisit untuk boundary (server action input/output).
+  - Untuk tipe yang bersumber dari DB, **derive dari Drizzle schema** (`$inferSelect` / `$inferInsert`) lalu compose via `Pick/Omit` (hindari menulis ulang `string | null | ...` manual).
+    - Simpan tipe bersama di `lib/<domain>/types.ts` sebagai *type-only module* (gunakan `typeof import('@/db/schema').table.$inferSelect`) agar aman direuse lintas fitur dan otomatis ikut berubah saat schema berubah.
+    - Jika perlu serialisasi untuk client (mis. `Date → string`), buat fungsi `serialize*()` di server (action/query) dan jadikan outputnya sebagai tipe DTO.
 
 ## Documentation & Comments
 
@@ -257,6 +263,28 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Tambah komponen via CLI (contoh): `bunx shadcn@latest add button dialog form`.
   - Ikuti arahan shadcn untuk Tailwind versi yang dipakai (repo ini memakai Tailwind CSS v4 dengan `app/globals.css` sebagai token/theme).
   - Jangan edit massal komponen vendor tanpa alasan; buat wrapper komponen internal jika butuh variasi/behavior tambahan.
+- Images (Next.js `next/image`):
+  - Untuk render gambar di UI, gunakan `ImageWithSkeleton` dari `components/ui/image-with-skeleton.tsx` (skeleton + fade-in konsisten).
+  - Untuk Server Components, tetap prefer `next/image` langsung agar tidak memaksa client bundle; pakai `ImageWithSkeleton` hanya saat butuh loader/transition.
+  - Wajib isi `alt`; untuk dekoratif gunakan `alt=""`.
+  - Jika pakai `fill`, pastikan wrapper punya ukuran via `containerClassName` (mis. `aspect-square`) dan set `sizes` agar optimasi responsif benar.
+  - Di Next.js terbaru, prefer `preload` (bukan `priority`, deprecated).
+  - Hindari `onLoadingComplete` (deprecated); gunakan `onLoad`.
+- Empty states:
+  - Untuk state kosong / error state yang sifatnya “page-level”, gunakan `EmptyState` dari `components/ui/empty-state.tsx` agar markup konsisten dan tidak repetitif.
+  - Hindari compose manual `Empty` + `EmptyHeader` + `EmptyTitle` di page kecuali butuh layout yang sangat custom.
+- Tables (DataTable):
+  - Untuk table interaktif (sort/search/column visibility/pagination), gunakan `DataTable` dari `components/ui/data-table.tsx` (TanStack + shadcn).
+  - Jangan bikin `<table>` HTML manual di page—reuse `DataTable` / `components/ui/table.tsx`.
+  - `DataTable` bersifat **UI-only**: data harus sudah disiapkan di `page.tsx`/server dan diteruskan via prop `data`.
+  - Untuk label kolom di menu “Kolom”, set `meta: { label: '...' }` di `ColumnDef`.
+  - Tipe row (`TData`) untuk DataTable sebaiknya didefinisikan di modul types terpusat (mis. `lib/<domain>/types.ts`) dan **diturunkan dari Drizzle schema**.
+  - Optimasi: batasi ukuran dataset yang dikirim ke client. Jika data besar, lakukan paging/filter di server sebelum render.
+  - URL state (plain params):
+    - Jika ingin state table (pagination/search) tersimpan di URL, set `enableUrlState` + `urlStateKey` pada `DataTable`.
+    - `DataTable` akan menulis parameter plain dengan prefix `urlStateKey`: `*_page`, `*_pageSize`, `*_q`.
+    - `page.tsx` harus membaca `searchParams` dan melakukan fetch sesuai nilai URL (tenant-scoped).
+    - Sorting tetap client-side dan tidak ditulis ke URL.
 - State management (Zustand):
   - Gunakan **Zustand** untuk UI state lintas komponen (modal, filter, selection, multi-step flow), bukan untuk server state.
   - Store hanya dipakai di Client Components; jangan import store ke module server/RSC.
@@ -321,10 +349,20 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
 - Server actions (standarisasi response):
   - Jangan `throw` untuk error yang diharapkan; kembalikan response yang konsisten dan typesafe.
   - Gunakan `ActionResult<T>` dari `lib/actions/result.ts` (pattern: `{ ok: true, data }` atau `{ ok: false, error: { code, message, field_errors? } }`).
+- Route handlers / Fetch API (standarisasi response):
+  - Untuk endpoint internal (`app/api/*`), **return JSON berbentuk `ActionResult`** agar client tidak perlu parsing custom.
+  - Gunakan helper `lib/http/response.ts` (`jsonOk/jsonErr`) untuk konsistensi status code + payload.
+  - Di client, konsumsi endpoint internal via `fetchActionResult()` (`lib/http/fetch.ts`), bukan `fetch()` manual.
+  - **Jangan pernah** mengirim error mentah (SQL, stack trace, params) ke client; untuk 5xx kembalikan pesan aman + log detailnya di server.
+- NextAuth `signIn()` (Credentials):
+  - Jangan tampilkan `result.error` mentah ke user (bisa berisi detail internal).
+  - Map `result.error` ke pesan aman via `getLoginErrorMessage()` (`lib/auth/errors.ts`).
+  - Di `CredentialsProvider.authorize()`, tangkap error infra (mis. DB mati) dan `throw new Error(AUTH_ERROR.SERVICE_UNAVAILABLE)` agar client bisa menampilkan pesan yang benar tanpa leak.
 - Error message untuk user harus aman (tidak membocorkan detail DB/stack).
 - Standardisasi error UI:
   - **Expected error** (validasi/permission/not-found) → render state UI biasa (pakai `ActionResult`), jangan lempar error.
   - **Unexpected error** (infra/bug/DB down) → biarkan kena `error.tsx`; tampilkan pesan aman + “Kode” (`digest`) untuk user, dan tampilkan detail troubleshooting hanya untuk developer/superadmin (harus disanitize).
+  - Untuk kasus error server/data (mis. DB down), tombol “Coba lagi” di `error.tsx` sebaiknya menjalankan `reset()` **dan** `router.refresh()` agar server component refetch tanpa hard refresh.
 - Log event penting untuk audit (bukan sekadar `console.log`).
 
 ## Performance & UX
@@ -340,6 +378,7 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Prefer formatting di server (RSC/export) agar tidak membebani client bundle.
   - Jika dipakai di client, pertimbangkan import terbatas/dynamic import pada halaman yang benar-benar perlu.
 - Standarisasi helper format (mis. `formatDate`, `formatDateTime`) agar konsisten di UI/report/export.
+  - Default formatter saat ini: `formatDateTime()` di `lib/utils.ts` (locale `id-ID`, timezone `Asia/Jakarta`).
 - Install: `bun add moment` (opsional: `moment-timezone` jika butuh timezone rules)
 
 ## Testing (Jest)

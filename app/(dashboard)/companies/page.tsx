@@ -1,5 +1,5 @@
 import { authOptions } from '@/auth';
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
+import { EmptyState } from '@/components/ui/empty-state';
 import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
 
@@ -10,13 +10,9 @@ export default async function CompaniesPage() {
   if (session.user.system_role !== 'SUPERADMIN') redirect('/dashboard');
 
   return (
-    <Empty>
-      <EmptyHeader>
-        <EmptyTitle>Companies</EmptyTitle>
-        <EmptyDescription>
-          Coming soon (superadmin): create company, set limits, manage status.
-        </EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+    <EmptyState
+      title="Companies"
+      description="Coming soon (superadmin): create company, set limits, manage status."
+    />
   );
 }

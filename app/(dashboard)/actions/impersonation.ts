@@ -2,12 +2,12 @@
 
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { getServerSession } from 'next-auth/next';
 
-import { authOptions } from '@/auth';
 import { db } from '@/db';
-import { activityLogs, companies } from '@/db/schema';
+import { companies } from '@/db/schema';
+import { logActivity } from '@/lib/activity/log';
 import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
+import { requireSuperadminSession } from '@/lib/auth/guards';
 
 /** Input schema for setting superadmin impersonation. */
 const setImpersonationSchema = z.object({
@@ -23,11 +23,9 @@ const setImpersonationSchema = z.object({
 export async function auditSuperadminImpersonation(
   input: z.infer<typeof setImpersonationSchema>,
 ): Promise<ActionResult<{ company_id: string }>> {
-  const session = await getServerSession(authOptions);
-  if (!session) return err('UNAUTHENTICATED', 'Kamu harus login.');
-  if (session.user.system_role !== 'SUPERADMIN') {
-    return err('FORBIDDEN', 'Akses ditolak.');
-  }
+  const sessionResult = await requireSuperadminSession();
+  if (!sessionResult.ok) return sessionResult;
+  const session = sessionResult.data;
 
   const parsed = setImpersonationSchema.safeParse(input);
   if (!parsed.success) return errFromZod(parsed.error);
@@ -40,7 +38,7 @@ export async function auditSuperadminImpersonation(
 
   if (!company) return err('NOT_FOUND', 'Company tidak ditemukan.');
 
-  await db.insert(activityLogs).values({
+  await logActivity(db, {
     company_id: company.id,
     actor_user_id: session.user.id,
     action: 'superadmin.impersonate.set',
@@ -55,11 +53,9 @@ export async function auditSuperadminImpersonation(
 export async function auditClearSuperadminImpersonation(): Promise<
   ActionResult<{ cleared: true }>
 > {
-  const session = await getServerSession(authOptions);
-  if (!session) return err('UNAUTHENTICATED', 'Kamu harus login.');
-  if (session.user.system_role !== 'SUPERADMIN') {
-    return err('FORBIDDEN', 'Akses ditolak.');
-  }
+  const sessionResult = await requireSuperadminSession();
+  if (!sessionResult.ok) return sessionResult;
+  const session = sessionResult.data;
 
   if (!session.active_company_id) return ok({ cleared: true });
 
@@ -71,7 +67,7 @@ export async function auditClearSuperadminImpersonation(): Promise<
 
   if (!company) return ok({ cleared: true });
 
-  await db.insert(activityLogs).values({
+  await logActivity(db, {
     company_id: company.id,
     actor_user_id: session.user.id,
     action: 'superadmin.impersonate.clear',

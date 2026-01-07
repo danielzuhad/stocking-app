@@ -1,7 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { toast } from 'sonner';
 
 import { LoginForm } from '@/app/(public)/login/login-form';
+import { AUTH_ERROR } from '@/lib/auth/errors';
 
 const pushMock = jest.fn();
 const refreshMock = jest.fn();
@@ -89,6 +91,28 @@ describe('LoginForm', () => {
         callbackUrl: '/',
       });
       expect(pushMock).toHaveBeenCalledWith('/dashboard');
+    });
+  });
+
+  it('shows a safe error message when auth service is unavailable', async () => {
+    const user = userEvent.setup();
+    signInMock.mockResolvedValue({
+      error: AUTH_ERROR.SERVICE_UNAVAILABLE,
+      ok: false,
+      status: 401,
+      url: null,
+    });
+
+    render(<LoginForm />);
+
+    await user.type(screen.getByLabelText('Username'), 'admin');
+    await user.type(screen.getByLabelText('Password'), 'password');
+    await user.click(screen.getByRole('button', { name: 'Masuk' }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+      );
     });
   });
 });

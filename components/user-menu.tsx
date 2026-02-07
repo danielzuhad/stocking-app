@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-import { auditClearSuperadminImpersonation } from '../actions/impersonation';
+import { auditClearSuperadminImpersonation } from '../app/(dashboard)/actions/impersonation';
 import type { SystemRole } from './nav';
 
 /**

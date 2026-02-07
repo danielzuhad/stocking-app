@@ -4,10 +4,10 @@ import type { ColumnDef } from '@tanstack/react-table';
 
 import { Badge } from '@/components/ui/badge';
 import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table';
-import type { SystemLogRow } from '@/lib/activity/types';
+import type { SystemLogRowType } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 
-const columns: Array<ColumnDef<SystemLogRow>> = [
+const columns: Array<ColumnDef<SystemLogRowType>> = [
   {
     accessorKey: 'created_at',
     meta: { label: 'Waktu' },
@@ -38,7 +38,9 @@ const columns: Array<ColumnDef<SystemLogRow>> = [
   {
     accessorKey: 'action',
     meta: { label: 'Aksi' },
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Aksi" />,
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Aksi" />
+    ),
     cell: ({ getValue }) => (
       <Badge variant="outline" className="font-mono">
         {String(getValue())}
@@ -71,7 +73,7 @@ const columns: Array<ColumnDef<SystemLogRow>> = [
 ];
 
 /**
- * Client table for System Logs (URL-driven pagination/search).
+ * Client table for System Logs (URL-driven pagination).
  */
 export function SystemLogsTable({
   data,
@@ -79,7 +81,7 @@ export function SystemLogsTable({
   initialPageIndex,
   initialPageSize,
 }: {
-  data: SystemLogRow[];
+  data: SystemLogRowType[];
   rowCount: number;
   initialPageIndex: number;
   initialPageSize: number;
@@ -91,8 +93,6 @@ export function SystemLogsTable({
       rowCount={rowCount}
       initialPageIndex={initialPageIndex}
       initialPageSize={initialPageSize}
-      enableSearch
-      searchPlaceholder="Cari company / aksi / aktor / target…"
       enableUrlState
       urlStateKey="dt_system_logs"
     />

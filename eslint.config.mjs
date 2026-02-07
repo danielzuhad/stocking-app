@@ -38,6 +38,35 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+  {
+    files: [
+      "types/company.ts",
+      "types/user.ts",
+      "types/membership.ts",
+      "types/activity-log.ts",
+    ],
+    rules: {
+      "@typescript-eslint/naming-convention": [
+        "error",
+        {
+          selector: "typeAlias",
+          format: ["PascalCase"],
+          custom: {
+            regex: "Type$",
+            match: true,
+          },
+        },
+        {
+          selector: "interface",
+          format: ["PascalCase"],
+          custom: {
+            regex: "Type$",
+            match: true,
+          },
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

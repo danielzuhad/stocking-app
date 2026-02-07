@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { db } from '@/db';
 import { companies } from '@/db/schema';
-import { logActivity } from '@/lib/activity/log';
+import { logActivity } from '@/lib/audit';
 import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
 import { requireSuperadminSession } from '@/lib/auth/guards';
 

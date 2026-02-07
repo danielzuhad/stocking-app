@@ -1,8 +1,11 @@
 import 'server-only';
 
 import { activityLogs, users } from '@/db/schema';
-import type { DataTableOrderByMap } from '@/lib/data-table/drizzle';
-import type { DataTableQuery } from '@/lib/data-table/types';
+import type {
+  DataTableIlikeColumn,
+  DataTableOrderByMap,
+} from '@/lib/table/drizzle';
+import type { DataTableQuery } from '@/lib/table/types';
 
 /** Default sorting for log-like tables: newest first. */
 export const DEFAULT_LOGS_SORT: DataTableQuery['sorting'] = [
@@ -15,6 +18,14 @@ export const BASE_LOGS_ORDER_BY_MAP = {
   action: activityLogs.action,
   actor_username: users.username,
 } satisfies DataTableOrderByMap;
+
+/** Shared search columns across log-like tables. */
+export const BASE_LOGS_SEARCH_COLUMNS = [
+  activityLogs.action,
+  users.username,
+  activityLogs.target_type,
+  activityLogs.target_id,
+] satisfies DataTableIlikeColumn[];
 
 /**
  * Serializes a `created_at: Date` field into an ISO string for client-safe rows.

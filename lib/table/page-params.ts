@@ -7,7 +7,7 @@ import type { DataTableQuery } from './types';
  */
 export type PageSearchParams = Record<string, string | string[] | undefined>;
 
-/** Default options used by DataTable page size selectors. */
+/** Default options used by page size selectors. */
 export const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
 /**
@@ -54,7 +54,7 @@ export type DataTableSearchParams = {
 };
 
 /**
- * Reads the standard DataTable URL search params for a given URL state key.
+ * Reads the standard table URL search params for a given URL state key.
  */
 export function getDataTableSearchParams(
   searchParams: PageSearchParams,

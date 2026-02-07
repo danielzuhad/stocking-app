@@ -4,10 +4,10 @@ import type { ColumnDef } from '@tanstack/react-table';
 
 import { Badge } from '@/components/ui/badge';
 import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table';
-import type { ActivityLogRow } from '@/lib/activity/types';
+import type { ActivityLogRowType } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 
-const columns: Array<ColumnDef<ActivityLogRow>> = [
+const columns: Array<ColumnDef<ActivityLogRowType>> = [
   {
     accessorKey: 'created_at',
     meta: { label: 'Waktu' },
@@ -74,7 +74,7 @@ const columns: Array<ColumnDef<ActivityLogRow>> = [
 ];
 
 /**
- * Client table for Activity Logs (URL-driven pagination/search).
+ * Client table for Activity Logs (URL-driven pagination).
  */
 export function ActivityLogsTable({
   data,
@@ -82,7 +82,7 @@ export function ActivityLogsTable({
   initialPageIndex,
   initialPageSize,
 }: {
-  data: ActivityLogRow[];
+  data: ActivityLogRowType[];
   rowCount: number;
   initialPageIndex: number;
   initialPageSize: number;
@@ -94,8 +94,6 @@ export function ActivityLogsTable({
       rowCount={rowCount}
       initialPageIndex={initialPageIndex}
       initialPageSize={initialPageSize}
-      enableSearch
-      searchPlaceholder="Cari aksi / aktor / target…"
       enableUrlState
       urlStateKey="dt_activity_logs"
     />

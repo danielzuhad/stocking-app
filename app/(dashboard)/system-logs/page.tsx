@@ -1,22 +1,13 @@
-import { desc, eq, sql } from 'drizzle-orm';
-
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { db } from '@/db';
-import { activityLogs, companies, users } from '@/db/schema';
-import { serializeCreatedAt } from '@/lib/activity/logs.data-table';
-import type { SystemLogRow } from '@/lib/activity/types';
 import { requireSuperadminSession } from '@/lib/auth/guards';
-import { buildDataTableIlikeSearch } from '@/lib/data-table/drizzle';
 import {
-  DEFAULT_PAGE_SIZE_OPTIONS,
-  getDataTableSearchParams,
-  parsePageIndex,
-  parsePageSize,
+  getDataTableQueryFromSearchParams,
   type PageSearchParams,
-} from '@/lib/data-table/page-params';
+} from '@/lib/table/page-params';
 
+import { fetchSystemLogsTable } from './fetcher';
 import { SystemLogsTable } from './system-logs-table';
 
 const URL_STATE_KEY = 'dt_system_logs';
@@ -38,55 +29,19 @@ export default async function SystemLogsPage({
     );
   }
 
-  const { pageParam, pageSizeParam, searchParam } = getDataTableSearchParams(
+  const query = getDataTableQueryFromSearchParams(
     resolvedSearchParams,
     URL_STATE_KEY,
   );
 
-  const pageIndex = parsePageIndex(pageParam);
-  const pageSize = parsePageSize(pageSizeParam, DEFAULT_PAGE_SIZE_OPTIONS[0]);
-  const search = searchParam.trim();
+  const logsResult = await fetchSystemLogsTable(query, sessionResult.data);
+  if (!logsResult.ok) {
+    return (
+      <EmptyState title="System Logs" description={logsResult.error.message} />
+    );
+  }
 
-  const searchWhere = buildDataTableIlikeSearch(search, [
-    activityLogs.action,
-    users.username,
-    activityLogs.target_type,
-    activityLogs.target_id,
-    companies.name,
-    companies.slug,
-  ]);
-  const whereClause = searchWhere;
-
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(activityLogs)
-    .innerJoin(companies, eq(companies.id, activityLogs.company_id))
-    .innerJoin(users, eq(users.id, activityLogs.actor_user_id))
-    .where(whereClause);
-
-  const rowCount = Number(count ?? 0);
-
-  const rows = await db
-    .select({
-      id: activityLogs.id,
-      created_at: activityLogs.created_at,
-      action: activityLogs.action,
-      company_id: companies.id,
-      company_name: companies.name,
-      company_slug: companies.slug,
-      actor_username: users.username,
-      target_type: activityLogs.target_type,
-      target_id: activityLogs.target_id,
-    })
-    .from(activityLogs)
-    .innerJoin(companies, eq(companies.id, activityLogs.company_id))
-    .innerJoin(users, eq(users.id, activityLogs.actor_user_id))
-    .where(whereClause)
-    .orderBy(desc(activityLogs.created_at))
-    .limit(pageSize)
-    .offset(pageIndex * pageSize);
-
-  const logs: SystemLogRow[] = rows.map((row) => serializeCreatedAt(row));
+  const { data, meta } = logsResult.data;
 
   return (
     <div className="space-y-6">
@@ -99,16 +54,16 @@ export default async function SystemLogsPage({
             </div>
           </div>
           <Badge variant="secondary">
-            {rowCount.toLocaleString('id-ID')} logs
+            {meta.rowCount.toLocaleString('id-ID')} logs
           </Badge>
         </CardHeader>
       </Card>
 
       <SystemLogsTable
-        data={logs}
-        rowCount={rowCount}
-        initialPageIndex={pageIndex}
-        initialPageSize={pageSize}
+        data={data}
+        rowCount={meta.rowCount}
+        initialPageIndex={meta.pageIndex}
+        initialPageSize={meta.pageSize}
       />
     </div>
   );

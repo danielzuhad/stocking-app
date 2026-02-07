@@ -23,7 +23,6 @@ import {
   ChevronsLeftIcon,
   ChevronsRightIcon,
   Settings2Icon,
-  XIcon,
 } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
@@ -41,7 +40,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './dropdown-menu';
-import { Input } from './input';
 import {
   Table,
   TableBody,
@@ -66,17 +64,6 @@ function getColumnLabel<TData>(column: Column<TData, unknown>): string {
   return column.id;
 }
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = React.useState(value);
-
-  React.useEffect(() => {
-    const handle = window.setTimeout(() => setDebounced(value), delayMs);
-    return () => window.clearTimeout(handle);
-  }, [value, delayMs]);
-
-  return debounced;
-}
-
 function parsePositiveInt(value: string | null, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number(value);
@@ -88,79 +75,6 @@ function getUrlKey(prefix: string, key: string): string {
   return prefix ? `${prefix}_${key}` : key;
 }
 
-function normalizeSearchValue(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (value instanceof Date) return value.toISOString();
-
-  const type = typeof value;
-  if (type === 'string' || type === 'number' || type === 'boolean') {
-    return String(value);
-  }
-
-  if (type === 'object') {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return '';
-    }
-  }
-
-  return String(value);
-}
-
-function getValueByPath(obj: unknown, path: string): unknown {
-  if (!obj || typeof obj !== 'object') return undefined;
-  if (!path.includes('.')) {
-    return (obj as Record<string, unknown>)[path];
-  }
-
-  return path
-    .split('.')
-    .reduce<unknown>(
-      (acc, key) =>
-        acc && typeof acc === 'object'
-          ? (acc as Record<string, unknown>)[key]
-          : undefined,
-      obj,
-    );
-}
-
-function getColumnValue<TData, TValue>(
-  row: TData,
-  rowIndex: number,
-  column: ColumnDef<TData, TValue>,
-): unknown {
-  if ('accessorFn' in column && typeof column.accessorFn === 'function') {
-    return column.accessorFn(row, rowIndex);
-  }
-
-  if ('accessorKey' in column) {
-    const key = column.accessorKey;
-    if (typeof key === 'string') return getValueByPath(row, key);
-    if (typeof key === 'number' && Array.isArray(row)) return row[key];
-  }
-
-  return undefined;
-}
-
-function flattenColumns<TData, TValue>(
-  columns: ColumnDef<TData, TValue>[],
-): ColumnDef<TData, TValue>[] {
-  const result: ColumnDef<TData, TValue>[] = [];
-
-  for (const column of columns) {
-    if ('columns' in column && Array.isArray(column.columns)) {
-      result.push(
-        ...flattenColumns(column.columns as ColumnDef<TData, TValue>[]),
-      );
-    } else {
-      result.push(column);
-    }
-  }
-
-  return result;
-}
-
 export type DataTableProps<TData, TValue> = {
   /** TanStack column definitions. */
   columns: ColumnDef<TData, TValue>[];
@@ -169,12 +83,8 @@ export type DataTableProps<TData, TValue> = {
   /** Total rows for the dataset (optional, for server-paged data). */
   rowCount?: number;
 
-  /** Toolbar (search + view options). */
+  /** Toolbar (actions + view options). */
   enableToolbar?: boolean;
-  /** Enables search input (client-side filter). */
-  enableSearch?: boolean;
-  searchPlaceholder?: string;
-  searchDebounceMs?: number;
   /** Extra content on the right side of the toolbar (e.g. "Create" button). */
   toolbarActions?: React.ReactNode;
   /** Enables column visibility dropdown. */
@@ -191,7 +101,7 @@ export type DataTableProps<TData, TValue> = {
   emptyTitle?: string;
   emptyDescription?: string;
 
-  /** Sync pagination/search state into plain URL params. */
+  /** Sync pagination state into plain URL params. */
   enableUrlState?: boolean;
   /** URL query param key used as prefix when `enableUrlState` is enabled. */
   urlStateKey?: string;
@@ -381,16 +291,13 @@ function DataTablePagination<TData>({
 }
 
 /**
- * Reusable DataTable (client-side sorting + URL-driven search/pagination).
+ * Reusable DataTable (client-side sorting + URL-driven pagination).
  */
 export function DataTable<TData, TValue>({
   columns,
   data,
   rowCount,
   enableToolbar = true,
-  enableSearch = true,
-  searchPlaceholder = 'Cari…',
-  searchDebounceMs = 300,
   toolbarActions,
   enableColumnVisibility = true,
   enablePagination = true,
@@ -398,7 +305,7 @@ export function DataTable<TData, TValue>({
   pageSizeOptions = [10, 20, 50, 100],
   initialPageIndex = 0,
   emptyTitle = 'Tidak ada data',
-  emptyDescription = 'Coba ubah filter atau kata kunci pencarian.',
+  emptyDescription = 'Coba ubah filter atau data yang ditampilkan.',
   enableUrlState = false,
   urlStateKey = 'dt',
 }: DataTableProps<TData, TValue>) {
@@ -413,46 +320,11 @@ export function DataTable<TData, TValue>({
     pageIndex: initialPageIndex,
     pageSize: initialPageSize,
   });
-  const [searchInput, setSearchInput] = React.useState('');
-
-  const debouncedSearchValue = useDebouncedValue(searchInput, searchDebounceMs);
-  const effectiveSearchValue = enableSearch ? debouncedSearchValue : '';
-  const shouldClientFilter = !enableUrlState;
-
-  const searchableColumns = React.useMemo(
-    () =>
-      flattenColumns(columns).filter(
-        (column) => 'accessorFn' in column || 'accessorKey' in column,
-      ),
-    [columns],
-  );
-
-  const clientFilteredData = React.useMemo(() => {
-    if (!shouldClientFilter) return data;
-
-    const term = effectiveSearchValue.trim().toLowerCase();
-    if (!term) return data;
-
-    return data.filter((row, rowIndex) =>
-      searchableColumns.some((column) => {
-        const value = getColumnValue(row, rowIndex, column);
-        if (value === null || value === undefined) return false;
-        const text = normalizeSearchValue(value).toLowerCase();
-        return text.includes(term);
-      }),
-    );
-  }, [data, effectiveSearchValue, searchableColumns, shouldClientFilter]);
-
-  const totalCount = rowCount ?? clientFilteredData.length;
+  const totalCount = rowCount ?? data.length;
   const pageCount = Math.max(1, Math.ceil(totalCount / pagination.pageSize));
   const isManualPagination =
     !enablePagination ||
     (typeof rowCount === 'number' && rowCount > data.length);
-
-  React.useEffect(() => {
-    if (!enableSearch) return;
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [enableSearch, effectiveSearchValue]);
 
   React.useEffect(() => {
     const maxPageIndex = Math.max(0, pageCount - 1);
@@ -465,7 +337,6 @@ export function DataTable<TData, TValue>({
     () => ({
       page: getUrlKey(urlStateKey, 'page'),
       pageSize: getUrlKey(urlStateKey, 'pageSize'),
-      search: getUrlKey(urlStateKey, 'q'),
     }),
     [urlStateKey],
   );
@@ -483,11 +354,8 @@ export function DataTable<TData, TValue>({
       searchParams.get(urlKeys.pageSize),
       initialPageSize,
     );
-    const nextSearch = enableSearch
-      ? (searchParams.get(urlKeys.search) ?? '')
-      : '';
 
-    const urlState = `${nextPage}|${nextPageSize}|${nextSearch}`;
+    const urlState = `${nextPage}|${nextPageSize}`;
     if (lastUrlStateRef.current === urlState) return;
     lastUrlStateRef.current = urlState;
 
@@ -501,17 +369,13 @@ export function DataTable<TData, TValue>({
         pageSize: nextPageSize,
       };
     });
-
-    setSearchInput((prev) => (prev === nextSearch ? prev : nextSearch));
   }, [
-    enableSearch,
     enableUrlState,
     initialPageIndex,
     initialPageSize,
     searchParams,
     urlKeys.page,
     urlKeys.pageSize,
-    urlKeys.search,
   ]);
 
   React.useEffect(() => {
@@ -521,21 +385,13 @@ export function DataTable<TData, TValue>({
     params.set(urlKeys.page, String(pagination.pageIndex + 1));
     params.set(urlKeys.pageSize, String(pagination.pageSize));
 
-    if (enableSearch && effectiveSearchValue.trim()) {
-      params.set(urlKeys.search, effectiveSearchValue.trim());
-    } else {
-      params.delete(urlKeys.search);
-    }
-
     const next = params.toString();
     const current = searchParams.toString();
     if (next === current) return;
 
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
   }, [
-    enableSearch,
     enableUrlState,
-    effectiveSearchValue,
     pagination.pageIndex,
     pagination.pageSize,
     pathname,
@@ -543,13 +399,12 @@ export function DataTable<TData, TValue>({
     searchParams,
     urlKeys.page,
     urlKeys.pageSize,
-    urlKeys.search,
   ]);
 
   // TanStack Table hook is safe here; we accept React Compiler skipping memoization.
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
-    data: clientFilteredData,
+    data,
     columns,
     state: {
       sorting,
@@ -580,28 +435,7 @@ export function DataTable<TData, TValue>({
     <div className="space-y-4">
       {enableToolbar ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-1 items-center gap-2">
-            {enableSearch ? (
-              <div className="relative w-full max-w-sm">
-                <Input
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="pr-9"
-                />
-                {searchInput ? (
-                  <button
-                    type="button"
-                    onClick={() => setSearchInput('')}
-                    className="text-muted-foreground hover:text-foreground absolute inset-y-0 right-0 inline-flex items-center px-3"
-                    aria-label="Clear search"
-                  >
-                    <XIcon className="size-4" />
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <div className="flex-1" />
 
           <div className="flex items-center justify-end gap-2">
             {toolbarActions}

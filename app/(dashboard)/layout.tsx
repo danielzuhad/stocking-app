@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { DashboardShell } from './_components/dashboard-shell';
+import { DashboardShell } from '../../components/dashboard-shell';
 
 const SIDEBAR_STATE_COOKIE = 'sidebar_state';
 

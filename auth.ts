@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { memberships, users } from '@/db/schema';
 import { env } from '@/env';
-import { logActivity } from '@/lib/activity/log';
+import { logActivity } from '@/lib/audit';
 import { AUTH_ERROR } from '@/lib/auth/errors';
 import { getErrorPresentation } from '@/lib/errors/presentation';
 

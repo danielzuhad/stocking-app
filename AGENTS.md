@@ -216,13 +216,18 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Terapkan “rule of three”: baru ekstrak helper/shared code setelah pola duplikasi muncul berulang.
   - Buat util terpusat untuk hal-hal wajib seperti auth guard + tenant scope + audit log:
     - `requireAuthSession()` / `requireCompanyScope()` di `lib/auth/guards.ts`
-    - `logActivity()` di `lib/activity/log.ts` (append-only ke `activity_logs`)
+    - `logActivity()` di `lib/audit.ts` (append-only ke `activity_logs`)
   - Untuk helper kecil yang sifatnya generic dan kepakai lintas fitur (mis. formatter date/time), taruh di `lib/utils.ts` dan reuse (hindari copy-paste antar page).
 - Konsistensi tipe:
   - Definisikan tipe domain/DTO yang jelas; jangan bocorkan bentuk row DB mentah ke UI tanpa mapping yang disengaja.
   - Hindari `any`; prefer tipe eksplisit untuk boundary (server action input/output).
   - Untuk tipe yang bersumber dari DB, **derive dari Drizzle schema** (`$inferSelect` / `$inferInsert`) lalu compose via `Pick/Omit` (hindari menulis ulang `string | null | ...` manual).
-    - Simpan tipe bersama di `lib/<domain>/types.ts` sebagai *type-only module* (gunakan `typeof import('@/db/schema').table.$inferSelect`) agar aman direuse lintas fitur dan otomatis ikut berubah saat schema berubah.
+  - Standarisasi naming tipe (wajib konsisten):
+    - Untuk exported domain types/interfaces yang dishare lintas fitur (terutama di `types/*`), gunakan suffix **`Type`**: contoh `CompanyType`, `CompanyInsertType`, `SystemLogRowType`.
+    - Jangan gunakan prefix `I` / `T` untuk concrete domain type (hindari `ICompany`, `TCompany`).
+    - Prefix `T` hanya untuk generic parameter: contoh `TData`, `TInput`, `TContext`.
+    - Saat import, gunakan `import type { ... }` untuk menjaga intent type-only dan membantu optimasi build.
+  - Simpan tipe bersama di `lib/<domain>/types.ts` sebagai *type-only module* (gunakan `typeof import('@/db/schema').table.$inferSelect`) agar aman direuse lintas fitur dan otomatis ikut berubah saat schema berubah.
     - Jika perlu serialisasi untuk client (mis. `Date → string`), buat fungsi `serialize*()` di server (action/query) dan jadikan outputnya sebagai tipe DTO.
 
 ## Documentation & Comments
@@ -401,6 +406,7 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
 - TypeScript: hindari `any`, gunakan tipe domain yang jelas.
 - Format: Prettier; Lint: ESLint. Usahakan lulus sebelum merge.
 - Naming: konsisten, deskriptif, hindari singkatan yang membingungkan.
+  - Khusus shared domain type/interface: gunakan suffix `Type` (contoh `ProductType`, `ProductInsertType`).
 - Git hooks (Husky):
   - Gunakan **Husky** untuk quality gate (mis. pre-commit lint, pre-push test).
   - Hooks harus cepat; jika test suite sudah besar, pindahkan test berat ke pre-push/CI.

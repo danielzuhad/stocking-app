@@ -4,7 +4,11 @@ import type { ActionResult } from '@/lib/actions/result';
 import { err, errFromZod, ok } from '@/lib/actions/result';
 import { getErrorPresentation } from '@/lib/errors/presentation';
 
-import { dataTableQuerySchema, type DataTablePage, type DataTableQuery } from './types';
+import {
+  dataTableQuerySchema,
+  type DataTablePage,
+  type DataTableQuery,
+} from './types';
 
 export type DataTablePagination = {
   pageIndex: number;
@@ -16,7 +20,9 @@ export type DataTablePagination = {
 /**
  * Normalizes pagination values from a `DataTableQuery`.
  */
-export function getDataTablePagination(query: DataTableQuery): DataTablePagination {
+export function getDataTablePagination(
+  query: DataTableQuery,
+): DataTablePagination {
   const limit = query.pageSize;
   const offset = query.pageIndex * query.pageSize;
 
@@ -54,7 +60,13 @@ export type DataTableActionOptions<TContext, TWhere, TOrderBy, TRowDb, TRow> = {
  * - rowCount + rows fetching
  * - safe error response for infra errors
  */
-export async function fetchDataTablePage<TContext, TWhere, TOrderBy, TRowDb, TRow>(
+export async function fetchDataTablePage<
+  TContext,
+  TWhere,
+  TOrderBy,
+  TRowDb,
+  TRow,
+>(
   options: DataTableActionOptions<TContext, TWhere, TOrderBy, TRowDb, TRow>,
 ): Promise<ActionResult<DataTablePage<TRow>>> {
   const parsed = dataTableQuerySchema.safeParse(options.input);
@@ -89,4 +101,3 @@ export async function fetchDataTablePage<TContext, TWhere, TOrderBy, TRowDb, TRo
     );
   }
 }
-

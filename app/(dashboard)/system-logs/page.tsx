@@ -1,5 +1,3 @@
-import { Badge } from '@/components/ui/badge';
-import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { requireSuperadminSession } from '@/lib/auth/guards';
 import {
@@ -45,20 +43,6 @@ export default async function SystemLogsPage({
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <div className="space-y-1">
-            <CardTitle>System Logs</CardTitle>
-            <div className="text-muted-foreground text-sm">
-              Global audit logs lintas company.
-            </div>
-          </div>
-          <Badge variant="secondary">
-            {meta.rowCount.toLocaleString('id-ID')} logs
-          </Badge>
-        </CardHeader>
-      </Card>
-
       <SystemLogsTable
         data={data}
         rowCount={meta.rowCount}

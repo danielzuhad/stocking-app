@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { SQL } from 'drizzle-orm';
-import { eq, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { Session } from 'next-auth';
 
 import { db } from '@/db';
@@ -9,31 +9,16 @@ import { activityLogs, companies, users } from '@/db/schema';
 import { ok, type ActionResult } from '@/lib/actions/result';
 import { requireSuperadminSession } from '@/lib/auth/guards';
 import { fetchTable, type TableResponse } from '@/lib/fetchers/table';
-import {
-  buildDataTableIlikeSearch,
-  getDataTableOrderBy,
-  getDataTableSearchTerm,
-  type DataTableOrderByMap,
-} from '@/lib/table/drizzle';
 import type { DataTableQuery } from '@/lib/table/types';
-import {
-  BASE_LOGS_ORDER_BY_MAP,
-  BASE_LOGS_SEARCH_COLUMNS,
-  DEFAULT_LOGS_SORT,
-  serializeCreatedAt,
-} from '@/lib/logs';
 import type { SystemLogDbRowType, SystemLogRowType } from '@/types';
 
-const ORDER_BY_MAP: DataTableOrderByMap = {
-  ...BASE_LOGS_ORDER_BY_MAP,
-  company_name: companies.name,
-  company_slug: companies.slug,
-};
-
-const SEARCH_COLUMNS = [...BASE_LOGS_SEARCH_COLUMNS, companies.name, companies.slug];
+const DEFAULT_ORDER_BY = [desc(activityLogs.created_at)] as const;
 
 function serializeSystemLogRow(row: SystemLogDbRowType): SystemLogRowType {
-  return serializeCreatedAt(row);
+  return {
+    ...row,
+    created_at: row.created_at.toISOString(),
+  };
 }
 
 /**
@@ -53,12 +38,8 @@ export async function fetchSystemLogsTable(
       ? async () => ok(session)
       : requireSuperadminSession,
     table: {
-      buildWhere: (_, query): SQL | undefined => {
-        const search = getDataTableSearchTerm(query);
-        return buildDataTableIlikeSearch(search, SEARCH_COLUMNS);
-      },
-      buildOrderBy: (_, query) =>
-        getDataTableOrderBy(query.sorting, ORDER_BY_MAP, DEFAULT_LOGS_SORT),
+      buildWhere: (): SQL | undefined => undefined,
+      buildOrderBy: () => DEFAULT_ORDER_BY,
       getRowCount: async (_, whereClause) => {
         const [{ count }] = await db
           .select({ count: sql<number>`count(*)` })

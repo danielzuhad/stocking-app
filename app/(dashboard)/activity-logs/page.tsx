@@ -1,10 +1,4 @@
-import { type PageSearchParams } from '@/lib/data-table/page-params';
-
 /** Company-scoped activity logs (admin/superadmin only). */
-export default async function ActivityLogsPage({
-  searchParams,
-}: {
-  searchParams: PageSearchParams;
-}) {
+export default async function ActivityLogsPage() {
   return <div className="space-y-6"></div>;
 }

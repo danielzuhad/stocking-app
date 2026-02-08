@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -18,15 +18,11 @@ import { getErrorPresentation } from '@/lib/errors/presentation';
  */
 export default function DashboardError({
   error,
-  reset,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const { data: session } = useSession();
-  const [isPending, startTransition] = React.useTransition();
 
   const isSuperadmin = session?.user.system_role === 'SUPERADMIN';
   const showDeveloperDetails =
@@ -63,19 +59,6 @@ export default function DashboardError({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {/* <Button
-            isLoading={isPending}
-            loadingText="Mencoba lagi..."
-            className="w-fit shrink-0 whitespace-nowrap"
-            onClick={() => {
-              startTransition(() => {
-                reset();
-                router.refresh();
-              });
-            }}
-          >
-            Coba lagi
-          </Button> */}
           <Button variant="outline" asChild>
             <Link href="/dashboard">Ke dashboard</Link>
           </Button>

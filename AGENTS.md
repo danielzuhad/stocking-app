@@ -279,15 +279,15 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Untuk state kosong / error state yang sifatnya “page-level”, gunakan `EmptyState` dari `components/ui/empty-state.tsx` agar markup konsisten dan tidak repetitif.
   - Hindari compose manual `Empty` + `EmptyHeader` + `EmptyTitle` di page kecuali butuh layout yang sangat custom.
 - Tables (DataTable):
-  - Untuk table interaktif (sort/search/column visibility/pagination), gunakan `DataTable` dari `components/ui/data-table.tsx` (TanStack + shadcn).
+  - Untuk table interaktif (sort/column visibility/pagination), gunakan `DataTable` dari `components/ui/data-table.tsx` (TanStack + shadcn).
   - Jangan bikin `<table>` HTML manual di page—reuse `DataTable` / `components/ui/table.tsx`.
   - `DataTable` bersifat **UI-only**: data harus sudah disiapkan di `page.tsx`/server dan diteruskan via prop `data`.
   - Untuk label kolom di menu “Kolom”, set `meta: { label: '...' }` di `ColumnDef`.
   - Tipe row (`TData`) untuk DataTable sebaiknya didefinisikan di modul types terpusat (mis. `lib/<domain>/types.ts`) dan **diturunkan dari Drizzle schema**.
   - Optimasi: batasi ukuran dataset yang dikirim ke client. Jika data besar, lakukan paging/filter di server sebelum render.
   - URL state (plain params):
-    - Jika ingin state table (pagination/search) tersimpan di URL, set `enableUrlState` + `urlStateKey` pada `DataTable`.
-    - `DataTable` akan menulis parameter plain dengan prefix `urlStateKey`: `*_page`, `*_pageSize`, `*_q`.
+    - Jika ingin state table (pagination) tersimpan di URL, set `enableUrlState` + `urlStateKey` pada `DataTable`.
+    - `DataTable` akan menulis parameter plain dengan prefix `urlStateKey`: `*_page`, `*_pageSize`.
     - `page.tsx` harus membaca `searchParams` dan melakukan fetch sesuai nilai URL (tenant-scoped).
     - Sorting tetap client-side dan tidak ditulis ke URL.
 - State management (Zustand):
@@ -356,8 +356,7 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Gunakan `ActionResult<T>` dari `lib/actions/result.ts` (pattern: `{ ok: true, data }` atau `{ ok: false, error: { code, message, field_errors? } }`).
 - Route handlers / Fetch API (standarisasi response):
   - Untuk endpoint internal (`app/api/*`), **return JSON berbentuk `ActionResult`** agar client tidak perlu parsing custom.
-  - Gunakan helper `lib/http/response.ts` (`jsonOk/jsonErr`) untuk konsistensi status code + payload.
-  - Di client, konsumsi endpoint internal via `fetchActionResult()` (`lib/http/fetch.ts`), bukan `fetch()` manual.
+  - Konsistenkan helper response/fetch internal di satu modul terpusat (jika dipakai), agar status code + payload tidak tersebar.
   - **Jangan pernah** mengirim error mentah (SQL, stack trace, params) ke client; untuk 5xx kembalikan pesan aman + log detailnya di server.
 - NextAuth `signIn()` (Credentials):
   - Jangan tampilkan `result.error` mentah ke user (bisa berisi detail internal).

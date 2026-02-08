@@ -4,14 +4,20 @@
  * Keep this module type-only (no runtime exports).
  */
 
-export type { CompanyType, CompanyInsertType } from './company';
-export type { UserType, UserInsertType } from './user';
-export type { MembershipType, MembershipInsertType } from './membership';
-export type {
+type CompanyType = typeof import('@/db/schema').companies.$inferSelect;
+type UserType = typeof import('@/db/schema').users.$inferSelect;
+type ActivityLogType = typeof import('@/db/schema').activityLogs.$inferSelect;
+
+export type SystemLogDbRowType = Pick<
   ActivityLogType,
-  ActivityLogInsertType,
-  ActivityLogDbRowType,
-  ActivityLogRowType,
-  SystemLogDbRowType,
-  SystemLogRowType,
-} from './activity-log';
+  'id' | 'created_at' | 'action' | 'target_type' | 'target_id'
+> & {
+  company_id: CompanyType['id'];
+  company_name: CompanyType['name'];
+  company_slug: CompanyType['slug'];
+  actor_username: UserType['username'];
+};
+
+export type SystemLogRowType = Omit<SystemLogDbRowType, 'created_at'> & {
+  created_at: string;
+};

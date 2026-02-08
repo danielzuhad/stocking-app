@@ -39,12 +39,7 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    files: [
-      "types/company.ts",
-      "types/user.ts",
-      "types/membership.ts",
-      "types/activity-log.ts",
-    ],
+    files: ["types/index.d.ts"],
     rules: {
       "@typescript-eslint/naming-convention": [
         "error",

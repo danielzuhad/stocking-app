@@ -8,12 +8,12 @@ import type { DataTableQuery } from './types';
 export type PageSearchParams = Record<string, string | string[] | undefined>;
 
 /** Default options used by page size selectors. */
-export const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
 /**
  * Reads a search param value, normalizing array values to the first item.
  */
-export function getSearchParam(
+function getSearchParam(
   searchParams: PageSearchParams,
   key: string,
 ): string | null {
@@ -25,7 +25,7 @@ export function getSearchParam(
 /**
  * Parses a page size value with a safe fallback and allowed list.
  */
-export function parsePageSize(
+function parsePageSize(
   value: string | null,
   fallback: number,
   options: readonly number[] = DEFAULT_PAGE_SIZE_OPTIONS,
@@ -40,36 +40,14 @@ export function parsePageSize(
 /**
  * Parses a 1-based page index and returns a 0-based index for the UI.
  */
-export function parsePageIndex(value: string | null): number {
+function parsePageIndex(value: string | null): number {
   if (!value) return 0;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
   return Math.floor(parsed) - 1;
 }
 
-export type DataTableSearchParams = {
-  pageParam: string | null;
-  pageSizeParam: string | null;
-  searchParam: string;
-};
-
-/**
- * Reads the standard table URL search params for a given URL state key.
- */
-export function getDataTableSearchParams(
-  searchParams: PageSearchParams,
-  urlStateKey: string,
-): DataTableSearchParams {
-  const prefix = urlStateKey ? `${urlStateKey}_` : '';
-
-  return {
-    pageParam: getSearchParam(searchParams, `${prefix}page`),
-    pageSizeParam: getSearchParam(searchParams, `${prefix}pageSize`),
-    searchParam: getSearchParam(searchParams, `${prefix}q`) ?? '',
-  };
-}
-
-export type DataTableQueryFromSearchParamsOptions = {
+type DataTableQueryFromSearchParamsOptions = {
   pageSizeOptions?: readonly number[];
   defaultPageSize?: number;
 };
@@ -82,10 +60,9 @@ export function getDataTableQueryFromSearchParams(
   urlStateKey: string,
   options?: DataTableQueryFromSearchParamsOptions,
 ): DataTableQuery {
-  const { pageParam, pageSizeParam, searchParam } = getDataTableSearchParams(
-    searchParams,
-    urlStateKey,
-  );
+  const prefix = urlStateKey ? `${urlStateKey}_` : '';
+  const pageParam = getSearchParam(searchParams, `${prefix}page`);
+  const pageSizeParam = getSearchParam(searchParams, `${prefix}pageSize`);
   const pageSizeOptions = options?.pageSizeOptions ?? DEFAULT_PAGE_SIZE_OPTIONS;
   const defaultPageSize =
     options?.defaultPageSize ?? pageSizeOptions[0] ?? 10;
@@ -93,8 +70,5 @@ export function getDataTableQueryFromSearchParams(
   return {
     pageIndex: parsePageIndex(pageParam),
     pageSize: parsePageSize(pageSizeParam, defaultPageSize, pageSizeOptions),
-    sorting: [],
-    globalFilter: searchParam.trim(),
-    columnFilters: [],
   };
 }

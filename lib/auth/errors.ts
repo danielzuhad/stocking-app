@@ -11,8 +11,6 @@ export const AUTH_ERROR = {
   SERVICE_UNAVAILABLE: 'AUTH_SERVICE_UNAVAILABLE',
 } as const;
 
-export type AuthErrorCode = (typeof AUTH_ERROR)[keyof typeof AUTH_ERROR];
-
 /**
  * Maps NextAuth `signIn()` error strings into a safe, user-friendly message.
  *
@@ -32,4 +30,3 @@ export function getLoginErrorMessage(error: string | null | undefined): string {
 
   return 'Gagal memproses login. Coba lagi.';
 }
-

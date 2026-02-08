@@ -3,12 +3,12 @@ import 'server-only';
 import { db } from '@/db';
 import { activityLogs } from '@/db/schema';
 
-export type ActivityLogTarget = {
+type ActivityLogTarget = {
   target_type?: string | null;
   target_id?: string | null;
 };
 
-export type LogActivityInput = {
+type LogActivityInput = {
   company_id: string;
   actor_user_id: string;
   /**

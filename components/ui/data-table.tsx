@@ -213,53 +213,65 @@ function DataTablePagination<TData>({
   const pageCount = Math.max(1, table.getPageCount());
   const canPrevious = table.getCanPreviousPage();
   const canNext = table.getCanNextPage();
+  const navButtonClass =
+    'size-8 rounded-md border border-transparent transition-colors enabled:cursor-pointer enabled:hover:border-border enabled:hover:bg-accent enabled:hover:text-accent-foreground disabled:cursor-not-allowed disabled:border-border/60 disabled:bg-muted/40 disabled:text-muted-foreground/70';
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 sm:gap-3">
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="icon"
-          className="hidden h-8 w-8 lg:inline-flex"
+          className={cn('hidden lg:inline-flex', navButtonClass)}
           onClick={() => table.setPageIndex(0)}
           disabled={!canPrevious}
-          aria-label="First page"
+          aria-label="Halaman pertama"
+          title={
+            canPrevious ? 'Ke halaman pertama' : 'Sudah di halaman pertama'
+          }
         >
           <ChevronsLeftIcon className="size-4" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className={navButtonClass}
           onClick={() => table.previousPage()}
           disabled={!canPrevious}
-          aria-label="Previous page"
+          aria-label="Halaman sebelumnya"
+          title={
+            canPrevious ? 'Ke halaman sebelumnya' : 'Sudah di halaman pertama'
+          }
         >
           <ChevronLeftIcon className="size-4" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className={navButtonClass}
           onClick={() => table.nextPage()}
           disabled={!canNext}
-          aria-label="Next page"
+          aria-label="Halaman berikutnya"
+          title={
+            canNext ? 'Ke halaman berikutnya' : 'Sudah di halaman terakhir'
+          }
         >
           <ChevronRightIcon className="size-4" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="hidden h-8 w-8 lg:inline-flex"
+          className={cn('hidden lg:inline-flex', navButtonClass)}
           onClick={() => table.setPageIndex(pageCount - 1)}
           disabled={!canNext}
-          aria-label="Last page"
+          aria-label="Halaman terakhir"
+          title={canNext ? 'Ke halaman terakhir' : 'Sudah di halaman terakhir'}
         >
           <ChevronsRightIcon className="size-4" />
         </Button>
       </div>
 
-      <div className="text-muted-foreground text-sm tabular-nums">
+      <div className="bg-muted text-foreground rounded-md border px-2.5 py-1 text-sm tabular-nums">
         Hal {pageIndex + 1} / {pageCount}
       </div>
 
@@ -504,10 +516,6 @@ export function DataTable<TData, TValue>({
               {hasAnyRows ? (
                 <>
                   Menampilkan{' '}
-                  <span className="text-foreground font-medium">
-                    {startIndex.toLocaleString('id-ID')}
-                  </span>
-                  {'–'}
                   <span className="text-foreground font-medium">
                     {endIndex.toLocaleString('id-ID')}
                   </span>{' '}

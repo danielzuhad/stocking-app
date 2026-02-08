@@ -1,6 +1,6 @@
-export type ErrorKind = 'DATABASE' | 'NETWORK' | 'UNKNOWN';
+type ErrorKind = 'DATABASE' | 'NETWORK' | 'UNKNOWN';
 
-export type ErrorPresentation = {
+type ErrorPresentation = {
   user: {
     /** Safe title to display to end users (no internal details). */
     title: string;

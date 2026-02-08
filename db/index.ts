@@ -26,5 +26,3 @@ if (process.env.NODE_ENV !== 'production') globalWithDb.__dbSql = sql;
  * Tenant scope is enforced at the query layer (guards/services), not here.
  */
 export const db = drizzle(sql, { schema });
-
-export { sql };

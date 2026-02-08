@@ -8,7 +8,7 @@ import { z } from 'zod';
  */
 
 /** Canonical error codes for server actions (stable contract for UI handling). */
-export type ActionErrorCode =
+type ActionErrorCode =
   | 'UNAUTHENTICATED'
   | 'FORBIDDEN'
   | 'INVALID_INPUT'

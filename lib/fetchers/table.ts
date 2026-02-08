@@ -6,9 +6,9 @@ import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
 import { dataTableQuerySchema, type DataTableQuery } from '@/lib/table/types';
 import { getErrorPresentation } from '@/lib/errors/presentation';
 
-export type TableRowCountMode = 'exact' | 'none';
+type TableRowCountMode = 'exact' | 'none';
 
-export type TableMeta = {
+type TableMeta = {
   pageIndex: number;
   pageSize: number;
   rowCount: number;
@@ -23,21 +23,21 @@ export type TableResponse<TData> = {
   meta: TableMeta;
 };
 
-export type TablePaginationOptions = {
+type TablePaginationOptions = {
   /** Hard cap for page size (useful to prevent expensive queries). */
   maxPageSize?: number;
   /** Skip `count(*)` when set to `none` (meta will be best-effort). */
   rowCountMode?: TableRowCountMode;
 };
 
-export type TablePagination = {
+type TablePagination = {
   pageIndex: number;
   pageSize: number;
   limit: number;
   offset: number;
 };
 
-export type TableFetcherOptions<
+type TableFetcherOptions<
   TInput extends DataTableQuery,
   TContext,
   TWhere,

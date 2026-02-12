@@ -1,6 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
+import * as React from 'react';
 
 import InputSearch from '@/components/input-search';
 import { Badge } from '@/components/ui/badge';
@@ -90,22 +91,31 @@ export function SystemLogsTable({
   initialPageIndex: number;
   initialPageSize: number;
 }) {
-  const { pagination, onPaginationChange } = useDataTableUrlPagination({
-    urlStateKey: URL_STATE_KEY,
-    defaultPageIndex: initialPageIndex,
-    defaultPageSize: initialPageSize,
-  });
+  const { pagination, onPaginationChange, isPending } =
+    useDataTableUrlPagination({
+      urlStateKey: URL_STATE_KEY,
+      defaultPageIndex: initialPageIndex,
+      defaultPageSize: initialPageSize,
+    });
+  const [searchPending, setSearchPending] = React.useState(false);
+  const isLoading = isPending || searchPending;
 
   return (
     <DataTable
       columns={columns}
       data={data}
-      toolbarActions={<InputSearch placeholder="Cari aksi / aktor" />}
+      toolbarActions={
+        <InputSearch
+          placeholder="Cari aksi / aktor"
+          onPendingChange={setSearchPending}
+        />
+      }
       rowCount={rowCount}
       pagination={pagination}
       onPaginationChange={onPaginationChange}
       initialPageIndex={initialPageIndex}
       initialPageSize={initialPageSize}
+      isLoading={isLoading}
     />
   );
 }

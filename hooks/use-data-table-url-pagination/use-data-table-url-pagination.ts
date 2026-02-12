@@ -20,6 +20,7 @@ export type UrlPaginationOptionsType = {
 export type UrlPaginationStateType = {
   pagination: PaginationState;
   onPaginationChange: OnChangeFn<PaginationState>;
+  isPending: boolean;
 };
 
 function getUrlKey(prefix: string, key: string): string {
@@ -146,6 +147,7 @@ export function useDataTableUrlPagination(
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = React.useTransition();
   const searchParamsString = searchParams.toString();
   const pendingQueryRef = React.useRef<string | null>(null);
 
@@ -195,19 +197,22 @@ export function useDataTableUrlPagination(
           pendingQueryRef.current !== nextQuery
         ) {
           pendingQueryRef.current = nextQuery;
-          router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
-            scroll: false,
+          startTransition(() => {
+            router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, {
+              scroll: false,
+            });
           });
         }
 
         return next;
       });
     },
-    [options, pathname, router, searchParamsString],
+    [options, pathname, router, searchParamsString, startTransition],
   );
 
   return {
     pagination,
     onPaginationChange,
+    isPending,
   };
 }

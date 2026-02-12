@@ -41,6 +41,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './dropdown-menu';
+import { Spinner } from './spinner';
 import {
   Table,
   TableBody,
@@ -94,6 +95,9 @@ export type DataTableProps<TData, TValue> = {
   /** Empty state copy. */
   emptyTitle?: string;
   emptyDescription?: string;
+  /** Inline loading state (for URL/navigation pending state). */
+  isLoading?: boolean;
+  loadingText?: string;
 };
 
 export type DataTableColumnHeaderProps<TData> = {
@@ -194,14 +198,16 @@ function DataTableViewOptions<TData>({
 function DataTablePagination<TData>({
   table,
   pageSizeOptions,
+  isLoading = false,
 }: {
   table: TanStackTable<TData>;
   pageSizeOptions: readonly number[];
+  isLoading?: boolean;
 }) {
   const { pageIndex, pageSize } = table.getState().pagination;
   const pageCount = Math.max(1, table.getPageCount());
-  const canPrevious = table.getCanPreviousPage();
-  const canNext = table.getCanNextPage();
+  const canPrevious = !isLoading && table.getCanPreviousPage();
+  const canNext = !isLoading && table.getCanNextPage();
   const navButtonClass =
     'size-8 rounded-md border border-transparent transition-colors enabled:cursor-pointer enabled:hover:border-border enabled:hover:bg-accent enabled:hover:text-accent-foreground disabled:cursor-not-allowed disabled:border-border/60 disabled:bg-muted/40 disabled:text-muted-foreground/70';
 
@@ -266,7 +272,13 @@ function DataTablePagination<TData>({
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={isLoading}
+            aria-busy={isLoading || undefined}
+          >
             Baris
             <span className="text-foreground font-medium">{pageSize}</span>
             <ChevronDownIcon className="size-4" />
@@ -280,7 +292,11 @@ function DataTablePagination<TData>({
             onValueChange={(value) => table.setPageSize(Number(value))}
           >
             {pageSizeOptions.map((size) => (
-              <DropdownMenuRadioItem key={size} value={String(size)}>
+              <DropdownMenuRadioItem
+                key={size}
+                value={String(size)}
+                disabled={isLoading}
+              >
                 {size}
               </DropdownMenuRadioItem>
             ))}
@@ -309,6 +325,8 @@ export function DataTable<TData, TValue>({
   onPaginationChange,
   emptyTitle = 'Tidak ada data',
   emptyDescription = 'Coba ubah filter atau data yang ditampilkan.',
+  isLoading = false,
+  loadingText = 'Memuat data...',
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] =
@@ -387,6 +405,7 @@ export function DataTable<TData, TValue>({
   const startIndex = hasAnyRows ? pageIndex * pageSize + 1 : 0;
   const endIndex = hasAnyRows ? startIndex + currentCount - 1 : 0;
   const showEmpty = currentCount === 0;
+  const showLoadingOverlay = isLoading;
 
   return (
     <div className="space-y-4">
@@ -400,7 +419,19 @@ export function DataTable<TData, TValue>({
         </div>
       ) : null}
 
-      <div className="rounded-md border">
+      <div
+        className="relative rounded-md border"
+        aria-busy={isLoading || undefined}
+      >
+        {showLoadingOverlay ? (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/45">
+            <div className="bg-background text-foreground inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs shadow-sm">
+              <Spinner className="size-3.5" />
+              {loadingText}
+            </div>
+          </div>
+        ) : null}
+
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -419,7 +450,7 @@ export function DataTable<TData, TValue>({
             ))}
           </TableHeader>
 
-          <TableBody>
+          <TableBody className={isLoading ? '[&>tr]:opacity-60' : undefined}>
             {showEmpty ? (
               <TableRow>
                 <TableCell
@@ -478,6 +509,7 @@ export function DataTable<TData, TValue>({
             <DataTablePagination
               table={table}
               pageSizeOptions={pageSizeOptions}
+              isLoading={isLoading}
             />
           </div>
         ) : null}

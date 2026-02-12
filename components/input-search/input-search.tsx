@@ -14,6 +14,8 @@ type InputSearchProps = {
   urlStateKey?: string;
   debounceMs?: number;
   maxLength?: number;
+  /** Emits pending navigation state while URL update is in-flight. */
+  onPendingChange?: (pending: boolean) => void;
 };
 
 /**
@@ -30,10 +32,12 @@ export default function InputSearch({
   urlStateKey,
   debounceMs = 400,
   maxLength = 100,
+  onPendingChange,
 }: InputSearchProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isPending, startTransition] = React.useTransition();
   const searchParamsString = searchParams.toString();
   const valueFromUrl = searchParams.get(queryKey) ?? '';
   const pendingQueryRef = React.useRef<string | null>(null);
@@ -68,6 +72,16 @@ export default function InputSearch({
   }, [searchParamsString, valueFromUrl]);
 
   React.useEffect(() => {
+    onPendingChange?.(isPending);
+  }, [isPending, onPendingChange]);
+
+  React.useEffect(() => {
+    return () => {
+      onPendingChange?.(false);
+    };
+  }, [onPendingChange]);
+
+  React.useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       if (value === valueFromUrl) return;
 
@@ -87,7 +101,9 @@ export default function InputSearch({
       }
 
       pendingQueryRef.current = nextQuery;
-      router.replace(`${pathname}?${nextQuery}`, { scroll: false });
+      startTransition(() => {
+        router.replace(`${pathname}?${nextQuery}`, { scroll: false });
+      });
     }, debounceMs);
 
     return () => {
@@ -99,6 +115,7 @@ export default function InputSearch({
     queryKey,
     router,
     searchParamsString,
+    startTransition,
     urlStateKey,
     value,
     valueFromUrl,

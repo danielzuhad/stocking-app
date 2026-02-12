@@ -37,13 +37,34 @@ export default function InputSearch({
   const searchParamsString = searchParams.toString();
   const valueFromUrl = searchParams.get(queryKey) ?? '';
   const pendingQueryRef = React.useRef<string | null>(null);
+  const previousValueFromUrlRef = React.useRef(valueFromUrl);
   const [value, setValue] = React.useState(valueFromUrl);
+  const latestValueRef = React.useRef(valueFromUrl);
 
   React.useEffect(() => {
-    if (pendingQueryRef.current === searchParamsString) {
+    latestValueRef.current = value;
+  }, [value]);
+
+  React.useEffect(() => {
+    const isOwnAck = pendingQueryRef.current === searchParamsString;
+    if (isOwnAck) {
       pendingQueryRef.current = null;
     }
-    setValue(valueFromUrl);
+
+    const didQueryValueChange = previousValueFromUrlRef.current !== valueFromUrl;
+    previousValueFromUrlRef.current = valueFromUrl;
+
+    // Ignore unrelated URL param changes (page/pageSize/etc) while user is typing.
+    if (!didQueryValueChange) {
+      return;
+    }
+
+    // Ignore stale URL acknowledgement if user has already typed a newer value.
+    if (isOwnAck && latestValueRef.current !== valueFromUrl) {
+      return;
+    }
+
+    setValue((prev) => (prev === valueFromUrl ? prev : valueFromUrl));
   }, [searchParamsString, valueFromUrl]);
 
   React.useEffect(() => {

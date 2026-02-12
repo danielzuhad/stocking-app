@@ -39,6 +39,22 @@ describe('InputSearch', () => {
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
+  it('does not reset typed value when unrelated URL params change', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <InputSearch queryKey="q" urlStateKey="dt_system_logs" />,
+    );
+
+    const input = screen.getByRole('searchbox', { name: 'Cari...' });
+    await user.type(input, 'audit');
+    expect(input).toHaveValue('audit');
+
+    currentQuery = 'q=&dt_system_logs_page=2&dt_system_logs_pageSize=10';
+    rerender(<InputSearch queryKey="q" urlStateKey="dt_system_logs" />);
+
+    expect(input).toHaveValue('audit');
+  });
+
   it('updates URL after debounce and resets page to 1', async () => {
     jest.useFakeTimers();
     currentQuery = 'q=old&dt_system_logs_page=3&dt_system_logs_pageSize=20';
@@ -74,6 +90,43 @@ describe('InputSearch', () => {
     expect(params.get('dt_system_logs_page')).toBe('1');
     expect(params.get('dt_system_logs_pageSize')).toBe('20');
 
+    jest.useRealTimers();
+  });
+
+  it('does not overwrite newer typed value when stale URL ack arrives', async () => {
+    jest.useFakeTimers();
+    currentQuery = 'q=&dt_system_logs_page=1&dt_system_logs_pageSize=10';
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+    const { rerender } = render(
+      <InputSearch
+        queryKey="q"
+        urlStateKey="dt_system_logs"
+        debounceMs={400}
+      />,
+    );
+
+    const input = screen.getByRole('searchbox', { name: 'Cari...' });
+
+    await user.type(input, 'a');
+    act(() => {
+      jest.advanceTimersByTime(400);
+    });
+    expect(replaceMock).toHaveBeenCalledTimes(1);
+
+    await user.type(input, 'b');
+    expect(input).toHaveValue('ab');
+
+    // Simulate late router ack for previous debounced value (`q=a`).
+    currentQuery = 'q=a&dt_system_logs_page=1&dt_system_logs_pageSize=10';
+    rerender(
+      <InputSearch
+        queryKey="q"
+        urlStateKey="dt_system_logs"
+        debounceMs={400}
+      />,
+    );
+
+    expect(input).toHaveValue('ab');
     jest.useRealTimers();
   });
 

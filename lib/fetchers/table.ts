@@ -63,6 +63,12 @@ type TableCacheOptions<TInput extends DataTableQuery, TContext> = {
    * Use small values for list/table data (for example 5-30s).
    */
   revalidate?: number | false;
+  /**
+   * Enables cache debug logs (server-side only).
+   *
+   * Useful to inspect computed key parts and detect `HIT` vs `MISS`.
+   */
+  debug?: boolean;
 };
 
 type TableFetcherOptions<
@@ -188,6 +194,7 @@ function getApproximateMeta(
  *     ],
  *     getTags: (ctx) => [`system-logs:${ctx.activeCompanyId}`],
  *     revalidate: 15,
+ *     debug: true, // logs key + HIT/MISS to server console
  *   },
  * });
  *
@@ -279,12 +286,36 @@ export async function fetchTable<
         ...options.cache.getKeyParts(ctx, query),
       ];
       const tags = options.cache.getTags?.(ctx, query);
-      const cachedQuery = unstable_cache(runTableQuery, keyParts, {
+      const debug = options.cache.debug === true;
+      if (debug) {
+        console.info('[table-cache] key', {
+          errorTag: options.errorTag,
+          keyParts,
+          tags,
+          revalidate: options.cache.revalidate,
+        });
+      }
+
+      let isMiss = false;
+      const runTableQueryWithDebug = async () => {
+        isMiss = true;
+        return runTableQuery();
+      };
+      const cachedQuery = unstable_cache(runTableQueryWithDebug, keyParts, {
         revalidate: options.cache.revalidate,
         tags: tags ? [...tags] : undefined,
       });
 
-      return ok(await cachedQuery());
+      const response = await cachedQuery();
+      if (debug) {
+        console.info('[table-cache] result', {
+          errorTag: options.errorTag,
+          status: isMiss ? 'MISS' : 'HIT',
+          keyParts,
+        });
+      }
+
+      return ok(response);
     }
 
     return ok(await runTableQuery());

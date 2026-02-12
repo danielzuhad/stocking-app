@@ -9,90 +9,142 @@ import { db } from '@/db';
 import { activityLogs, companies, users } from '@/db/schema';
 import { ok, type ActionResult } from '@/lib/actions/result';
 import { requireSuperadminSession } from '@/lib/auth/guards';
+import {
+  createIlikeSearch,
+  type SearchOptionsType,
+} from '@/lib/fetchers/search';
 import { fetchTable, type TableResponse } from '@/lib/fetchers/table';
-import { dataTableQuerySchema, type DataTableQuery } from '@/lib/table/types';
+import { dataTableQuerySchema } from '@/lib/table/types';
 import type { SystemLogType } from '@/types';
 
-type SystemLogsTableQueryType = DataTableQuery & {
-  q?: string;
-};
-type SystemLogDbRowType = Omit<SystemLogType, 'created_at'> & {
-  created_at: Date;
+/**
+ * Template notes (copy-paste for other services):
+ * 1) Replace `*_QUERY_SCHEMA` to match route query params.
+ * 2) Replace `*_SEARCH_MAP` and `DEFAULT_*_SEARCH_FIELDS`.
+ * 3) Replace `*_ROW_SELECT` + base joins in `build*BaseSelect`.
+ * 4) Replace `serialize*Row` if DTO needs conversion (Date -> string, etc).
+ *
+ * Keep these shared pieces unchanged:
+ * - `createIlikeSearch` usage for typed search fields/options.
+ * - `fetchTable` call pattern (validation/auth/pagination/error handling).
+ */
+type QueryPaginationType = {
+  limit: number;
+  offset: number;
 };
 
 const DEFAULT_ORDER_BY = [desc(activityLogs.created_at)] as const;
+
+/** Input schema for system logs table fetch (pagination + optional query `q`). */
 const SYSTEM_LOGS_QUERY_SCHEMA = dataTableQuerySchema.extend({
   q: z.string().trim().max(100).optional(),
 });
-/**
- * Allowed fields for system log text search.
- */
-type SystemLogSearchFieldType = Exclude<
-  keyof SystemLogType,
-  'id' | 'created_at' | 'company_id'
->;
 
-const SYSTEM_LOG_SEARCH_FIELDS = [
+/** Query type is derived from schema to avoid type/schema drift. */
+type SystemLogsTableQueryType = z.infer<typeof SYSTEM_LOGS_QUERY_SCHEMA>;
+
+/** Searchable columns map (field key -> SQL expression). */
+const SYSTEM_LOG_SEARCH_MAP = {
+  action: activityLogs.action,
+  actor_username: users.username,
+  company_name: companies.name,
+  company_slug: companies.slug,
+  target_type: sql`COALESCE(${activityLogs.target_type}, '')`,
+  target_id: sql`COALESCE(${activityLogs.target_id}, '')`,
+} as const satisfies Record<string, SQLWrapper>;
+
+/** Default fields used when caller does not pass `options.search_fields`. */
+const DEFAULT_SYSTEM_LOG_SEARCH_FIELDS = [
   'action',
   'actor_username',
   'company_name',
   'company_slug',
   'target_type',
   'target_id',
-] as const satisfies readonly SystemLogSearchFieldType[];
+] as const satisfies readonly (keyof typeof SYSTEM_LOG_SEARCH_MAP)[];
 
-type FetchSystemLogsOptionsType = {
-  search_fields?: readonly SystemLogSearchFieldType[];
+/** Typed search helper for resolving fields and building `ILIKE` where clause. */
+const systemLogSearch = createIlikeSearch({
+  fields: SYSTEM_LOG_SEARCH_MAP,
+  defaultFields: DEFAULT_SYSTEM_LOG_SEARCH_FIELDS,
+});
+
+type RowCountModeType = 'exact' | 'none';
+
+/** Optional per-call overrides for system logs fetcher behavior. */
+type FetchSystemLogsOptionsType = SearchOptionsType<
+  typeof SYSTEM_LOG_SEARCH_MAP
+> & {
+  /** Optional count strategy: `none` can reduce query cost on very large datasets. */
+  row_count_mode?: RowCountModeType;
 };
 
+/** Minimal row selection from joined tables for system logs table responses. */
+const SYSTEM_LOG_ROW_SELECT = {
+  id: activityLogs.id,
+  created_at: activityLogs.created_at,
+  action: activityLogs.action,
+  company_id: companies.id,
+  company_name: companies.name,
+  company_slug: companies.slug,
+  actor_username: users.username,
+  target_type: activityLogs.target_type,
+  target_id: activityLogs.target_id,
+} as const;
+
+/**
+ * Shared joined query used by both rows + count queries.
+ *
+ * Keeping this in one place avoids join/filter drift between count and list.
+ */
+function buildSystemLogBaseSelect(whereClause: SQL | undefined) {
+  return db
+    .select(SYSTEM_LOG_ROW_SELECT)
+    .from(activityLogs)
+    .innerJoin(companies, eq(companies.id, activityLogs.company_id))
+    .innerJoin(users, eq(users.id, activityLogs.actor_user_id))
+    .where(whereClause);
+}
+
+/**
+ * Reads paginated system log rows.
+ */
+function getSystemLogRows(
+  whereClause: SQL | undefined,
+  orderBy: typeof DEFAULT_ORDER_BY,
+  pagination: QueryPaginationType,
+) {
+  return buildSystemLogBaseSelect(whereClause)
+    .orderBy(...orderBy)
+    .limit(pagination.limit)
+    .offset(pagination.offset);
+}
+
+type SystemLogDbRowType = Awaited<ReturnType<typeof getSystemLogRows>>[number];
+
+/**
+ * Counts rows using the same base filter/join as `getSystemLogRows`.
+ */
+async function getSystemLogRowCount(
+  whereClause: SQL | undefined,
+): Promise<number> {
+  const baseQuery = buildSystemLogBaseSelect(whereClause).as(
+    'system_logs_count_base',
+  );
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(baseQuery);
+  return Number(count ?? 0);
+}
+
+/**
+ * Converts DB row shape into serializable UI/API shape.
+ */
 function serializeSystemLogRow(row: SystemLogDbRowType): SystemLogType {
   return {
     ...row,
     created_at: row.created_at.toISOString(),
   };
-}
-
-function resolveSearchFields(
-  options?: FetchSystemLogsOptionsType,
-): readonly SystemLogSearchFieldType[] {
-  if (!options?.search_fields?.length) {
-    return SYSTEM_LOG_SEARCH_FIELDS;
-  }
-  return options.search_fields;
-}
-
-function getSearchExpression(field: SystemLogSearchFieldType): SQLWrapper {
-  switch (field) {
-    case 'action':
-      return activityLogs.action;
-    case 'actor_username':
-      return users.username;
-    case 'company_name':
-      return companies.name;
-    case 'company_slug':
-      return companies.slug;
-    case 'target_type':
-      return sql`COALESCE(${activityLogs.target_type}, '')`;
-    case 'target_id':
-      return sql`COALESCE(${activityLogs.target_id}, '')`;
-  }
-}
-
-function buildSearchWhere(
-  query: SystemLogsTableQueryType,
-  searchFields: readonly SystemLogSearchFieldType[],
-): SQL | undefined {
-  if (!query.q || searchFields.length === 0) return undefined;
-  const search = `%${query.q}%`;
-  const conditions = searchFields.map(
-    (field) => sql`${getSearchExpression(field)} ILIKE ${search}`,
-  );
-
-  if (conditions.length === 1) {
-    return conditions[0];
-  }
-
-  return sql`(${sql.join(conditions, sql` OR `)})`;
 }
 
 /**
@@ -102,53 +154,43 @@ function buildSearchWhere(
  * - authenticated session
  * - `SUPERADMIN` role
  * - optional `search_fields` whitelist to control which columns are filtered by `q`
+ * - optional `row_count_mode` (`exact` | `none`) for count-query cost control
  */
 export async function fetchSystemLogsTable(
   input: SystemLogsTableQueryType,
   session?: Session,
   options?: FetchSystemLogsOptionsType,
 ): Promise<ActionResult<TableResponse<SystemLogType>>> {
-  const searchFields = resolveSearchFields(options);
+  const searchFields = systemLogSearch.resolveFields(options?.search_fields);
+  const cacheSearchFields = [...searchFields].sort().join(',');
+  const rowCountMode = options?.row_count_mode ?? 'exact';
 
   return fetchTable({
     input,
     schema: SYSTEM_LOGS_QUERY_SCHEMA,
+    pagination: {
+      rowCountMode,
+    },
     authorize: session ? async () => ok(session) : requireSuperadminSession,
     table: {
-      buildWhere: (_, query): SQL | undefined =>
-        buildSearchWhere(query, searchFields),
+      buildWhere: (_, query) =>
+        systemLogSearch.buildWhere(query.q, searchFields),
       buildOrderBy: () => DEFAULT_ORDER_BY,
-      getRowCount: async (_, whereClause) => {
-        const [{ count }] = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(activityLogs)
-          .innerJoin(companies, eq(companies.id, activityLogs.company_id))
-          .innerJoin(users, eq(users.id, activityLogs.actor_user_id))
-          .where(whereClause);
-        return Number(count ?? 0);
-      },
+      getRowCount: (_, whereClause) => getSystemLogRowCount(whereClause),
       getRows: (_, whereClause, orderBy, pagination) =>
-        db
-          .select({
-            id: activityLogs.id,
-            created_at: activityLogs.created_at,
-            action: activityLogs.action,
-            company_id: companies.id,
-            company_name: companies.name,
-            company_slug: companies.slug,
-            actor_username: users.username,
-            target_type: activityLogs.target_type,
-            target_id: activityLogs.target_id,
-          })
-          .from(activityLogs)
-          .innerJoin(companies, eq(companies.id, activityLogs.company_id))
-          .innerJoin(users, eq(users.id, activityLogs.actor_user_id))
-          .where(whereClause)
-          .orderBy(...orderBy)
-          .limit(pagination.limit)
-          .offset(pagination.offset),
+        getSystemLogRows(whereClause, orderBy, pagination),
       serializeRow: serializeSystemLogRow,
     },
+    // cache: {
+    //   getKeyParts: () => [
+    //     'scope:superadmin',
+    //     `search_fields:${cacheSearchFields}`,
+    //     `row_count_mode:${rowCountMode}`,
+    //   ],
+    //   getTags: () => ['system-logs'],
+    //   revalidate: 15,
+    //   debug: true,
+    // },
     errorTag: 'SYSTEM_LOGS_FETCH_ERROR',
   });
 }

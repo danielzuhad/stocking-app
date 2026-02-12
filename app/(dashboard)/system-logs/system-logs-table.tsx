@@ -7,11 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table';
 import { useDataTableUrlPagination } from '@/hooks/use-data-table-url-pagination/use-data-table-url-pagination';
 import { formatDateTime } from '@/lib/utils';
-import type { SystemLogRowType } from '@/types';
+import type { SystemLogType } from '@/types';
 
 const URL_STATE_KEY = 'dt_system_logs';
 
-const columns: Array<ColumnDef<SystemLogRowType>> = [
+const columns: Array<ColumnDef<SystemLogType>> = [
   {
     accessorKey: 'created_at',
     meta: { label: 'Waktu' },
@@ -85,7 +85,7 @@ export function SystemLogsTable({
   initialPageIndex,
   initialPageSize,
 }: {
-  data: SystemLogRowType[];
+  data: SystemLogType[];
   rowCount: number;
   initialPageIndex: number;
   initialPageSize: number;
@@ -100,7 +100,7 @@ export function SystemLogsTable({
     <DataTable
       columns={columns}
       data={data}
-      toolbarActions={<InputSearch />}
+      toolbarActions={<InputSearch placeholder="Cari aksi / aktor" />}
       rowCount={rowCount}
       pagination={pagination}
       onPaginationChange={onPaginationChange}

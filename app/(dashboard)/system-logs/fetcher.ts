@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { SQL } from 'drizzle-orm';
+import type { SQL, SQLWrapper } from 'drizzle-orm';
 import { desc, eq, sql } from 'drizzle-orm';
 import type { Session } from 'next-auth';
 import { z } from 'zod';
@@ -11,36 +11,88 @@ import { ok, type ActionResult } from '@/lib/actions/result';
 import { requireSuperadminSession } from '@/lib/auth/guards';
 import { fetchTable, type TableResponse } from '@/lib/fetchers/table';
 import { dataTableQuerySchema, type DataTableQuery } from '@/lib/table/types';
-import type { SystemLogDbRowType, SystemLogRowType } from '@/types';
+import type { SystemLogType } from '@/types';
+
+type SystemLogsTableQueryType = DataTableQuery & {
+  q?: string;
+};
+type SystemLogDbRowType = Omit<SystemLogType, 'created_at'> & {
+  created_at: Date;
+};
 
 const DEFAULT_ORDER_BY = [desc(activityLogs.created_at)] as const;
 const SYSTEM_LOGS_QUERY_SCHEMA = dataTableQuerySchema.extend({
   q: z.string().trim().max(100).optional(),
 });
+/**
+ * Allowed fields for system log text search.
+ */
+type SystemLogSearchFieldType = Exclude<
+  keyof SystemLogType,
+  'id' | 'created_at' | 'company_id'
+>;
 
-type SystemLogsTableQueryType = DataTableQuery & {
-  q?: string;
+const SYSTEM_LOG_SEARCH_FIELDS = [
+  'action',
+  'actor_username',
+  'company_name',
+  'company_slug',
+  'target_type',
+  'target_id',
+] as const satisfies readonly SystemLogSearchFieldType[];
+
+type FetchSystemLogsOptionsType = {
+  search_fields?: readonly SystemLogSearchFieldType[];
 };
 
-function serializeSystemLogRow(row: SystemLogDbRowType): SystemLogRowType {
+function serializeSystemLogRow(row: SystemLogDbRowType): SystemLogType {
   return {
     ...row,
     created_at: row.created_at.toISOString(),
   };
 }
 
-function buildSearchWhere(query: SystemLogsTableQueryType): SQL | undefined {
-  if (!query.q) return undefined;
+function resolveSearchFields(
+  options?: FetchSystemLogsOptionsType,
+): readonly SystemLogSearchFieldType[] {
+  if (!options?.search_fields?.length) {
+    return SYSTEM_LOG_SEARCH_FIELDS;
+  }
+  return options.search_fields;
+}
 
+function getSearchExpression(field: SystemLogSearchFieldType): SQLWrapper {
+  switch (field) {
+    case 'action':
+      return activityLogs.action;
+    case 'actor_username':
+      return users.username;
+    case 'company_name':
+      return companies.name;
+    case 'company_slug':
+      return companies.slug;
+    case 'target_type':
+      return sql`COALESCE(${activityLogs.target_type}, '')`;
+    case 'target_id':
+      return sql`COALESCE(${activityLogs.target_id}, '')`;
+  }
+}
+
+function buildSearchWhere(
+  query: SystemLogsTableQueryType,
+  searchFields: readonly SystemLogSearchFieldType[],
+): SQL | undefined {
+  if (!query.q || searchFields.length === 0) return undefined;
   const search = `%${query.q}%`;
-  return sql`(
-    ${activityLogs.action} ILIKE ${search}
-    OR ${users.username} ILIKE ${search}
-    OR ${companies.name} ILIKE ${search}
-    OR ${companies.slug} ILIKE ${search}
-    OR COALESCE(${activityLogs.target_type}, '') ILIKE ${search}
-    OR COALESCE(${activityLogs.target_id}, '') ILIKE ${search}
-  )`;
+  const conditions = searchFields.map(
+    (field) => sql`${getSearchExpression(field)} ILIKE ${search}`,
+  );
+
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
+
+  return sql`(${sql.join(conditions, sql` OR `)})`;
 }
 
 /**
@@ -49,19 +101,22 @@ function buildSearchWhere(query: SystemLogsTableQueryType): SQL | undefined {
  * Required:
  * - authenticated session
  * - `SUPERADMIN` role
+ * - optional `search_fields` whitelist to control which columns are filtered by `q`
  */
 export async function fetchSystemLogsTable(
   input: SystemLogsTableQueryType,
   session?: Session,
-): Promise<ActionResult<TableResponse<SystemLogRowType>>> {
+  options?: FetchSystemLogsOptionsType,
+): Promise<ActionResult<TableResponse<SystemLogType>>> {
+  const searchFields = resolveSearchFields(options);
+
   return fetchTable({
     input,
     schema: SYSTEM_LOGS_QUERY_SCHEMA,
-    authorize: session
-      ? async () => ok(session)
-      : requireSuperadminSession,
+    authorize: session ? async () => ok(session) : requireSuperadminSession,
     table: {
-      buildWhere: (_, query): SQL | undefined => buildSearchWhere(query),
+      buildWhere: (_, query): SQL | undefined =>
+        buildSearchWhere(query, searchFields),
       buildOrderBy: () => DEFAULT_ORDER_BY,
       getRowCount: async (_, whereClause) => {
         const [{ count }] = await db

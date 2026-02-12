@@ -37,6 +37,7 @@ export default async function SystemLogsPage({
   const logsResult = await fetchSystemLogsTable(
     { ...query, q },
     sessionResult.data,
+    { search_fields: ['action', 'actor_username'] },
   );
   if (!logsResult.ok) {
     return (

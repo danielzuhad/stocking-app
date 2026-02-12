@@ -4,8 +4,11 @@ import type { ColumnDef } from '@tanstack/react-table';
 
 import { Badge } from '@/components/ui/badge';
 import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table';
+import { useDataTableUrlPagination } from '@/hooks/use-data-table-url-pagination';
 import type { SystemLogRowType } from '@/types';
 import { formatDateTime } from '@/lib/utils';
+
+const URL_STATE_KEY = 'dt_system_logs';
 
 const columns: Array<ColumnDef<SystemLogRowType>> = [
   {
@@ -86,15 +89,21 @@ export function SystemLogsTable({
   initialPageIndex: number;
   initialPageSize: number;
 }) {
+  const { pagination, onPaginationChange } = useDataTableUrlPagination({
+    urlStateKey: URL_STATE_KEY,
+    defaultPageIndex: initialPageIndex,
+    defaultPageSize: initialPageSize,
+  });
+
   return (
     <DataTable
       columns={columns}
       data={data}
       rowCount={rowCount}
+      pagination={pagination}
+      onPaginationChange={onPaginationChange}
       initialPageIndex={initialPageIndex}
       initialPageSize={initialPageSize}
-      enableUrlState
-      urlStateKey="dt_system_logs"
     />
   );
 }

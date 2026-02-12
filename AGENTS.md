@@ -286,8 +286,8 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Tipe row (`TData`) untuk DataTable sebaiknya didefinisikan di modul types terpusat (mis. `lib/<domain>/types.ts`) dan **diturunkan dari Drizzle schema**.
   - Optimasi: batasi ukuran dataset yang dikirim ke client. Jika data besar, lakukan paging/filter di server sebelum render.
   - URL state (plain params):
-    - Jika ingin state table (pagination) tersimpan di URL, set `enableUrlState` + `urlStateKey` pada `DataTable`.
-    - `DataTable` akan menulis parameter plain dengan prefix `urlStateKey`: `*_page`, `*_pageSize`.
+    - `DataTable` bersifat UI-only; untuk state URL gunakan hook `useDataTableUrlPagination()` dari `hooks/use-data-table-url-pagination.ts`.
+    - Hook menulis parameter plain dengan prefix `urlStateKey`: `*_page`, `*_pageSize`.
     - `page.tsx` harus membaca `searchParams` dan melakukan fetch sesuai nilai URL (tenant-scoped).
     - Sorting tetap client-side dan tidak ditulis ke URL.
 - State management (Zustand):
@@ -305,6 +305,8 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
 - Caching & revalidation:
   - Pakai cache bawaan Next untuk read path yang cocok, dan revalidate via tag/path setelah mutasi.
   - Pastikan data sensitif/multi-tenant tidak “tercache silang” antar company (cache key/tag harus mengandung `companyId` atau dipisahkan).
+  - Untuk helper tabel server (`fetchTable` di `lib/fetchers/table.ts`), cache bersifat **opsional** via opsi `cache` (opt-in per fitur, bukan default).
+  - Jika mengaktifkan cache pada `fetchTable`, `cache.getKeyParts()` wajib memasukkan scope tenant/role/impersonation yang relevan agar tidak terjadi cross-tenant cache leak.
 - Data access:
   - Semua akses DB dan secret harus di server; jangan pernah expose credential ke browser.
 

@@ -8,6 +8,7 @@ import {
   useReactTable,
   type Column,
   type ColumnDef,
+  type OnChangeFn,
   type PaginationState,
   type SortingState,
   type Table as TanStackTable,
@@ -24,9 +25,9 @@ import {
   ChevronsRightIcon,
   Settings2Icon,
 } from 'lucide-react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
+import { TABLE_PAGE_SIZE_OPTIONS } from '@/lib/table/constants';
 import { cn } from '@/lib/utils';
 
 import { Button } from './button';
@@ -64,17 +65,6 @@ function getColumnLabel<TData>(column: Column<TData, unknown>): string {
   return column.id;
 }
 
-function parsePositiveInt(value: string | null, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.floor(parsed);
-}
-
-function getUrlKey(prefix: string, key: string): string {
-  return prefix ? `${prefix}_${key}` : key;
-}
-
 export type DataTableProps<TData, TValue> = {
   /** TanStack column definitions. */
   columns: ColumnDef<TData, TValue>[];
@@ -93,18 +83,18 @@ export type DataTableProps<TData, TValue> = {
   /** Pagination UI (client-side). */
   enablePagination?: boolean;
   initialPageSize?: number;
-  pageSizeOptions?: number[];
+  pageSizeOptions?: readonly number[];
   /** Page index is 0-based. */
   initialPageIndex?: number;
+  /** Controlled pagination state (optional). */
+  pagination?: PaginationState;
+  /** Controlled pagination callback (optional). */
+  onPaginationChange?: OnChangeFn<PaginationState>;
 
   /** Empty state copy. */
   emptyTitle?: string;
   emptyDescription?: string;
 
-  /** Sync pagination state into plain URL params. */
-  enableUrlState?: boolean;
-  /** URL query param key used as prefix when `enableUrlState` is enabled. */
-  urlStateKey?: string;
 };
 
 export type DataTableColumnHeaderProps<TData> = {
@@ -207,7 +197,7 @@ function DataTablePagination<TData>({
   pageSizeOptions,
 }: {
   table: TanStackTable<TData>;
-  pageSizeOptions: number[];
+  pageSizeOptions: readonly number[];
 }) {
   const { pageIndex, pageSize } = table.getState().pagination;
   const pageCount = Math.max(1, table.getPageCount());
@@ -314,103 +304,64 @@ export function DataTable<TData, TValue>({
   enableColumnVisibility = true,
   enablePagination = true,
   initialPageSize = 10,
-  pageSizeOptions = [10, 20, 50, 100],
+  pageSizeOptions = TABLE_PAGE_SIZE_OPTIONS,
   initialPageIndex = 0,
+  pagination: controlledPagination,
+  onPaginationChange,
   emptyTitle = 'Tidak ada data',
   emptyDescription = 'Coba ubah filter atau data yang ditampilkan.',
-  enableUrlState = false,
-  urlStateKey = 'dt',
 }: DataTableProps<TData, TValue>) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: initialPageIndex,
-    pageSize: initialPageSize,
-  });
+  const [internalPagination, setInternalPagination] =
+    React.useState<PaginationState>({
+      pageIndex: initialPageIndex,
+      pageSize: initialPageSize,
+    });
+  const pagination = controlledPagination ?? internalPagination;
+  const isPaginationControlled = controlledPagination !== undefined;
   const totalCount = rowCount ?? data.length;
   const pageCount = Math.max(1, Math.ceil(totalCount / pagination.pageSize));
   const isManualPagination =
-    !enablePagination ||
-    (typeof rowCount === 'number' && rowCount > data.length);
+    !enablePagination || typeof rowCount === 'number';
 
-  React.useEffect(() => {
-    const maxPageIndex = Math.max(0, pageCount - 1);
-    if (pagination.pageIndex > maxPageIndex) {
-      setPagination((prev) => ({ ...prev, pageIndex: maxPageIndex }));
-    }
-  }, [pageCount, pagination.pageIndex]);
+  const handlePaginationChange = React.useCallback<OnChangeFn<PaginationState>>(
+    (updater) => {
+      if (isPaginationControlled) {
+        onPaginationChange?.(updater);
+        return;
+      }
 
-  const urlKeys = React.useMemo(
-    () => ({
-      page: getUrlKey(urlStateKey, 'page'),
-      pageSize: getUrlKey(urlStateKey, 'pageSize'),
-    }),
-    [urlStateKey],
+      setInternalPagination(updater);
+    },
+    [isPaginationControlled, onPaginationChange],
   );
 
-  const lastUrlStateRef = React.useRef<string | null>(null);
-
   React.useEffect(() => {
-    if (!enableUrlState) return;
-
-    const nextPage = parsePositiveInt(
-      searchParams.get(urlKeys.page),
-      initialPageIndex + 1,
-    );
-    const nextPageSize = parsePositiveInt(
-      searchParams.get(urlKeys.pageSize),
-      initialPageSize,
-    );
-
-    const urlState = `${nextPage}|${nextPageSize}`;
-    if (lastUrlStateRef.current === urlState) return;
-    lastUrlStateRef.current = urlState;
-
-    setPagination((prev) => {
-      const nextIndex = Math.max(0, nextPage - 1);
-      if (prev.pageIndex === nextIndex && prev.pageSize === nextPageSize) {
-        return prev;
-      }
-      return {
-        pageIndex: nextIndex,
-        pageSize: nextPageSize,
-      };
-    });
+    if (isManualPagination || isPaginationControlled) return;
+    const maxPageIndex = Math.max(0, pageCount - 1);
+    if (pagination.pageIndex > maxPageIndex) {
+      setInternalPagination((prev) => ({ ...prev, pageIndex: maxPageIndex }));
+    }
   }, [
-    enableUrlState,
-    initialPageIndex,
-    initialPageSize,
-    searchParams,
-    urlKeys.page,
-    urlKeys.pageSize,
+    isManualPagination,
+    isPaginationControlled,
+    pageCount,
+    pagination.pageIndex,
   ]);
 
   React.useEffect(() => {
-    if (!enableUrlState) return;
+    if (isPaginationControlled) return;
 
-    const params = new URLSearchParams(searchParams.toString());
-    params.set(urlKeys.page, String(pagination.pageIndex + 1));
-    params.set(urlKeys.pageSize, String(pagination.pageSize));
-
-    const next = params.toString();
-    const current = searchParams.toString();
-    if (next === current) return;
-
-    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    setInternalPagination({
+      pageIndex: initialPageIndex,
+      pageSize: initialPageSize,
+    });
   }, [
-    enableUrlState,
-    pagination.pageIndex,
-    pagination.pageSize,
-    pathname,
-    router,
-    searchParams,
-    urlKeys.page,
-    urlKeys.pageSize,
+    isPaginationControlled,
+    initialPageIndex,
+    initialPageSize,
   ]);
 
   // TanStack Table hook is safe here; we accept React Compiler skipping memoization.
@@ -425,7 +376,7 @@ export function DataTable<TData, TValue>({
     },
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
-    onPaginationChange: setPagination,
+    onPaginationChange: handlePaginationChange,
     manualPagination: isManualPagination,
     pageCount: isManualPagination ? pageCount : undefined,
     getCoreRowModel: getCoreRowModel(),

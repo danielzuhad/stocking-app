@@ -1,4 +1,8 @@
 import type { DataTableQuery } from './types';
+import {
+  DEFAULT_TABLE_PAGE_SIZE,
+  TABLE_PAGE_SIZE_OPTIONS,
+} from './constants';
 
 /**
  * Shared Next.js `searchParams` type for pages.
@@ -6,9 +10,6 @@ import type { DataTableQuery } from './types';
  * Matches the App Router `searchParams` shape (string, array, or undefined).
  */
 export type PageSearchParams = Record<string, string | string[] | undefined>;
-
-/** Default options used by page size selectors. */
-const DEFAULT_PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 
 /**
  * Reads a search param value, normalizing array values to the first item.
@@ -28,7 +29,7 @@ function getSearchParam(
 function parsePageSize(
   value: string | null,
   fallback: number,
-  options: readonly number[] = DEFAULT_PAGE_SIZE_OPTIONS,
+  options: readonly number[] = TABLE_PAGE_SIZE_OPTIONS,
 ): number {
   if (!value) return fallback;
   const parsed = Number(value);
@@ -63,9 +64,9 @@ export function getDataTableQueryFromSearchParams(
   const prefix = urlStateKey ? `${urlStateKey}_` : '';
   const pageParam = getSearchParam(searchParams, `${prefix}page`);
   const pageSizeParam = getSearchParam(searchParams, `${prefix}pageSize`);
-  const pageSizeOptions = options?.pageSizeOptions ?? DEFAULT_PAGE_SIZE_OPTIONS;
+  const pageSizeOptions = options?.pageSizeOptions ?? TABLE_PAGE_SIZE_OPTIONS;
   const defaultPageSize =
-    options?.defaultPageSize ?? pageSizeOptions[0] ?? 10;
+    options?.defaultPageSize ?? pageSizeOptions[0] ?? DEFAULT_TABLE_PAGE_SIZE;
 
   return {
     pageIndex: parsePageIndex(pageParam),

@@ -1,10 +1,11 @@
 import 'server-only';
 
+import { unstable_cache } from 'next/cache';
 import type { ZodSchema } from 'zod';
 
 import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
-import { dataTableQuerySchema, type DataTableQuery } from '@/lib/table/types';
 import { getErrorPresentation } from '@/lib/errors/presentation';
+import { dataTableQuerySchema, type DataTableQuery } from '@/lib/table/types';
 
 type TableRowCountMode = 'exact' | 'none';
 
@@ -37,6 +38,33 @@ type TablePagination = {
   offset: number;
 };
 
+/**
+ * Optional cache controls for `fetchTable`.
+ *
+ * Keep caching feature-local and only enable it for read-heavy, low-volatility lists.
+ * To avoid cross-tenant leaks, key parts must include all access scopes that can
+ * change result data (for example: company, impersonation target, role scope).
+ */
+type TableCacheOptions<TInput extends DataTableQuery, TContext> = {
+  /**
+   * Extra key parts to scope cache safely.
+   *
+   * Must include tenant and permission scope where relevant (for example:
+   * `activeCompanyId`, role, or impersonation target).
+   */
+  getKeyParts: (ctx: TContext, query: TInput) => readonly string[];
+  /**
+   * Optional cache tags for explicit invalidation via `revalidateTag`.
+   */
+  getTags?: (ctx: TContext, query: TInput) => readonly string[];
+  /**
+   * Cache revalidation time in seconds.
+   *
+   * Use small values for list/table data (for example 5-30s).
+   */
+  revalidate?: number | false;
+};
+
 type TableFetcherOptions<
   TInput extends DataTableQuery,
   TContext,
@@ -61,6 +89,12 @@ type TableFetcherOptions<
     serializeRow: (row: TRowDb, ctx: TContext) => TRow;
   };
   pagination?: TablePaginationOptions;
+  /**
+   * Optional server cache for read-heavy tables.
+   *
+   * Keep this opt-in and feature-local; not all table data should be cached.
+   */
+  cache?: TableCacheOptions<TInput, TContext>;
   errorTag: string;
   userErrorMessage?: string;
 };
@@ -90,7 +124,8 @@ function getRowCountMeta(
   rowCount: number,
   pagination: TablePagination,
 ): Pick<TableMeta, 'pageCount' | 'hasNextPage' | 'hasPrevPage'> {
-  const pageCount = rowCount === 0 ? 0 : Math.ceil(rowCount / pagination.pageSize);
+  const pageCount =
+    rowCount === 0 ? 0 : Math.ceil(rowCount / pagination.pageSize);
   const hasNextPage = pagination.pageIndex + 1 < pageCount;
   const hasPrevPage = pagination.pageIndex > 0;
 
@@ -102,7 +137,9 @@ function getApproximateMeta(
   rowsLength: number,
 ): Pick<TableMeta, 'pageCount' | 'hasNextPage' | 'hasPrevPage'> {
   const hasNextPage = rowsLength === pagination.pageSize;
-  const pageCount = hasNextPage ? pagination.pageIndex + 2 : pagination.pageIndex + 1;
+  const pageCount = hasNextPage
+    ? pagination.pageIndex + 2
+    : pagination.pageIndex + 1;
   const hasPrevPage = pagination.pageIndex > 0;
 
   return { pageCount, hasNextPage, hasPrevPage };
@@ -114,6 +151,50 @@ function getApproximateMeta(
  * - Validates input with Zod
  * - Enforces auth/tenant scope via `authorize`
  * - Runs `count + rows` in parallel when possible
+ * - When `cache` is provided, wraps the DB query in Next.js `unstable_cache`
+ *   using: `errorTag + normalized query + cache key parts`.
+ *
+ * Cache flow (optional):
+ * 1. Parse and normalize query.
+ * 2. Build tenant-scoped context, where, and order.
+ * 3. Build one async query executor (`runTableQuery`).
+ * 4. If `cache` exists, cache executor with `keyParts/tags/revalidate`;
+ *    otherwise execute directly.
+ *
+ * Syntax:
+ * ```ts
+ * // No cache (default)
+ * await fetchTable({
+ *   input,
+ *   schema,
+ *   authorize,
+ *   table,
+ *   errorTag: 'SYSTEM_LOGS_FETCH_FAILED',
+ * });
+ *
+ * // With cache (optional)
+ * await fetchTable({
+ *   input,
+ *   schema,
+ *   authorize,
+ *   table,
+ *   errorTag: 'SYSTEM_LOGS_FETCH_FAILED',
+ *   cache: {
+ *     getKeyParts: (ctx, query) => [
+ *       `company:${ctx.activeCompanyId}`,
+ *       `role:${ctx.role}`,
+ *       `page:${query.pageIndex}`,
+ *       `size:${query.pageSize}`,
+ *     ],
+ *     getTags: (ctx) => [`system-logs:${ctx.activeCompanyId}`],
+ *     revalidate: 15,
+ *   },
+ * });
+ *
+ * // Invalidate after mutation (only if you use getTags)
+ * // import { revalidateTag } from 'next/cache';
+ * // revalidateTag(`system-logs:${activeCompanyId}`);
+ * ```
  */
 export async function fetchTable<
   TInput extends DataTableQuery,
@@ -123,7 +204,14 @@ export async function fetchTable<
   TRowDb,
   TRow,
 >(
-  options: TableFetcherOptions<TInput, TContext, TWhere, TOrderBy, TRowDb, TRow>,
+  options: TableFetcherOptions<
+    TInput,
+    TContext,
+    TWhere,
+    TOrderBy,
+    TRowDb,
+    TRow
+  >,
 ): Promise<ActionResult<TableResponse<TRow>>> {
   const schema = (options.schema ?? dataTableQuerySchema) as ZodSchema<TInput>;
   const parsed = schema.safeParse(options.input);
@@ -140,19 +228,13 @@ export async function fetchTable<
   const ctx = authResult.data;
   const where = options.table.buildWhere(ctx, query);
   const orderBy = options.table.buildOrderBy(ctx, query);
-
-  try {
+  const runTableQuery = async (): Promise<TableResponse<TRow>> => {
     if (rowCountMode === 'none') {
-      const rows = await options.table.getRows(
-        ctx,
-        where,
-        orderBy,
-        pagination,
-      );
+      const rows = await options.table.getRows(ctx, where, orderBy, pagination);
       const rowCount = pagination.pageIndex * pagination.pageSize + rows.length;
       const meta = getApproximateMeta(pagination, rows.length);
 
-      return ok({
+      return {
         data: rows.map((row) => options.table.serializeRow(row, ctx)),
         meta: {
           pageIndex: pagination.pageIndex,
@@ -161,11 +243,11 @@ export async function fetchTable<
           rowCountMode,
           ...meta,
         },
-      });
+      };
     }
 
     if (!options.table.getRowCount) {
-      return err('INTERNAL', 'Table configuration missing row count handler.');
+      throw new Error('Table configuration missing row count handler.');
     }
 
     const [rowCount, rows] = await Promise.all([
@@ -175,7 +257,7 @@ export async function fetchTable<
 
     const meta = getRowCountMeta(rowCount, pagination);
 
-    return ok({
+    return {
       data: rows.map((row) => options.table.serializeRow(row, ctx)),
       meta: {
         pageIndex: pagination.pageIndex,
@@ -184,7 +266,28 @@ export async function fetchTable<
         rowCountMode,
         ...meta,
       },
-    });
+    };
+  };
+
+  try {
+    if (options.cache) {
+      // Base key always includes `errorTag` and query to separate each table + params.
+      // Feature code must add tenant/permission scope via `getKeyParts`.
+      const keyParts = [
+        options.errorTag,
+        JSON.stringify(query),
+        ...options.cache.getKeyParts(ctx, query),
+      ];
+      const tags = options.cache.getTags?.(ctx, query);
+      const cachedQuery = unstable_cache(runTableQuery, keyParts, {
+        revalidate: options.cache.revalidate,
+        tags: tags ? [...tags] : undefined,
+      });
+
+      return ok(await cachedQuery());
+    }
+
+    return ok(await runTableQuery());
   } catch (error) {
     const presentation = getErrorPresentation({ error });
     console.error(options.errorTag, presentation.developer);

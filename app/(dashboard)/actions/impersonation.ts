@@ -1,6 +1,7 @@
 'use server';
 
 import { eq } from 'drizzle-orm';
+import { updateTag } from 'next/cache';
 import { z } from 'zod';
 
 import { db } from '@/db';
@@ -8,11 +9,22 @@ import { companies } from '@/db/schema';
 import { logActivity } from '@/lib/audit';
 import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
 import { requireSuperadminSession } from '@/lib/auth/guards';
+import { SYSTEM_LOGS_CACHE_TAG } from '@/lib/fetchers/cache-tags';
 
 /** Input schema for setting superadmin impersonation. */
 const setImpersonationSchema = z.object({
   company_id: z.string().uuid(),
 });
+
+/**
+ * Invalidates cached system logs after a successful audit write.
+ *
+ * `updateTag` is used here (instead of time-based waiting) so superadmin
+ * sees the latest log row immediately after impersonation actions.
+ */
+function revalidateSystemLogsCache(): void {
+  updateTag(SYSTEM_LOGS_CACHE_TAG);
+}
 
 /**
  * Audit + validation for setting superadmin impersonation.
@@ -43,6 +55,7 @@ export async function auditSuperadminImpersonation(
     actor_user_id: session.user.id,
     action: 'superadmin.impersonate.set',
   });
+  revalidateSystemLogsCache();
 
   return ok({ company_id: company.id });
 }
@@ -72,6 +85,7 @@ export async function auditClearSuperadminImpersonation(): Promise<
     actor_user_id: session.user.id,
     action: 'superadmin.impersonate.clear',
   });
+  revalidateSystemLogsCache();
 
   return ok({ cleared: true });
 }

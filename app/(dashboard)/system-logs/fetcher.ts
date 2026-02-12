@@ -9,6 +9,7 @@ import { db } from '@/db';
 import { activityLogs, companies, users } from '@/db/schema';
 import { ok, type ActionResult } from '@/lib/actions/result';
 import { requireSuperadminSession } from '@/lib/auth/guards';
+import { SYSTEM_LOGS_CACHE_TAG } from '@/lib/fetchers/cache-tags';
 import {
   createIlikeSearch,
   type SearchOptionsType,
@@ -181,16 +182,16 @@ export async function fetchSystemLogsTable(
         getSystemLogRows(whereClause, orderBy, pagination),
       serializeRow: serializeSystemLogRow,
     },
-    // cache: {
-    //   getKeyParts: () => [
-    //     'scope:superadmin',
-    //     `search_fields:${cacheSearchFields}`,
-    //     `row_count_mode:${rowCountMode}`,
-    //   ],
-    //   getTags: () => ['system-logs'],
-    //   revalidate: 15,
-    //   debug: true,
-    // },
+    cache: {
+      getKeyParts: () => [
+        'scope:superadmin',
+        `search_fields:${cacheSearchFields}`,
+        `row_count_mode:${rowCountMode}`,
+      ],
+      getTags: () => [SYSTEM_LOGS_CACHE_TAG],
+      revalidate: 15,
+      debug: false,
+    },
     errorTag: 'SYSTEM_LOGS_FETCH_ERROR',
   });
 }

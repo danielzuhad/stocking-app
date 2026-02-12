@@ -15,6 +15,20 @@
       "when": 1766480545942,
       "tag": "0001_system_logs_search_trgm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770898312442,
+      "tag": "0002_volatile_wolverine",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770899143707,
+      "tag": "0003_nebulous_jimmy_woo",
+      "breakpoints": true
     }
   ]
 }

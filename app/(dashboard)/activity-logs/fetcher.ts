@@ -2,39 +2,37 @@ import 'server-only';
 
 import type { SQL, SQLWrapper } from 'drizzle-orm';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { getServerSession } from 'next-auth/next';
 import type { Session } from 'next-auth';
 import { z } from 'zod';
 
-import { authOptions } from '@/auth';
 import { db } from '@/db';
 import { activityLogs, users } from '@/db/schema';
-import { err, ok, type ActionResult } from '@/lib/actions/result';
+import { err, type ActionResult } from '@/lib/actions/result';
+import {
+  requireAuthSession,
+  resolveActiveCompanyScopeFromSession,
+} from '@/lib/auth/guards';
 import {
   createIlikeSearch,
   type SearchOptionsType,
 } from '@/lib/fetchers/search';
-import { fetchTable, type TableResponse } from '@/lib/fetchers/table';
-import { dataTableQuerySchema } from '@/lib/table/types';
+import {
+  fetchTable,
+  type TableQueryPaginationType,
+  type TableResponse,
+  type TableRowCountModeType,
+} from '@/lib/fetchers/table';
+import { createDataTableQueryWithSearchSchema } from '@/lib/table/types';
 import type { ActivityLogRowType } from '@/types';
-
-type QueryPaginationType = {
-  limit: number;
-  offset: number;
-};
 
 type ActivityLogContextType = {
   company_id: string;
 };
 
-type RowCountModeType = 'exact' | 'none';
-
 const DEFAULT_ORDER_BY = [desc(activityLogs.created_at)] as const;
 
 /** Input schema for activity logs table fetch (pagination + optional query `q`). */
-const ACTIVITY_LOGS_QUERY_SCHEMA = dataTableQuerySchema.extend({
-  q: z.string().trim().max(100).optional(),
-});
+const ACTIVITY_LOGS_QUERY_SCHEMA = createDataTableQueryWithSearchSchema();
 
 /** Query type is derived from schema to avoid type/schema drift. */
 type ActivityLogsTableQueryType = z.infer<typeof ACTIVITY_LOGS_QUERY_SCHEMA>;
@@ -65,7 +63,7 @@ type FetchActivityLogsOptionsType = SearchOptionsType<
   typeof ACTIVITY_LOG_SEARCH_MAP
 > & {
   /** Optional count strategy: `none` can reduce query cost on very large datasets. */
-  row_count_mode?: RowCountModeType;
+  row_count_mode?: TableRowCountModeType;
 };
 
 /** Minimal row selection from joined tables for activity logs table responses. */
@@ -95,18 +93,10 @@ function resolveActivityLogContextFromSession(
     return err('FORBIDDEN', 'Akses activity logs hanya untuk admin.');
   }
 
-  if (!session.active_company_id) {
-    if (systemRole === 'SUPERADMIN') {
-      return err(
-        'FORBIDDEN',
-        'Pilih company impersonation dulu untuk melihat activity logs.',
-      );
-    }
-
-    return err('FORBIDDEN', 'Company aktif tidak ditemukan.');
-  }
-
-  return ok({ company_id: session.active_company_id });
+  return resolveActiveCompanyScopeFromSession(session, {
+    superadmin_missing_company:
+      'Pilih company impersonation dulu untuk melihat activity logs.',
+  });
 }
 
 /**
@@ -115,10 +105,10 @@ function resolveActivityLogContextFromSession(
 async function requireActivityLogContext(): Promise<
   ActionResult<ActivityLogContextType>
 > {
-  const session = await getServerSession(authOptions);
-  if (!session) return err('UNAUTHENTICATED', 'Kamu harus login.');
+  const sessionResult = await requireAuthSession();
+  if (!sessionResult.ok) return sessionResult;
 
-  return resolveActivityLogContextFromSession(session);
+  return resolveActivityLogContextFromSession(sessionResult.data);
 }
 
 /**
@@ -140,7 +130,7 @@ function buildActivityLogBaseSelect(whereClause: SQL | undefined) {
 function getActivityLogRows(
   whereClause: SQL | undefined,
   orderBy: typeof DEFAULT_ORDER_BY,
-  pagination: QueryPaginationType,
+  pagination: TableQueryPaginationType,
 ) {
   return buildActivityLogBaseSelect(whereClause)
     .orderBy(...orderBy)

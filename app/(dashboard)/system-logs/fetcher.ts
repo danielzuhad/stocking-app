@@ -7,15 +7,23 @@ import { z } from 'zod';
 
 import { db } from '@/db';
 import { activityLogs, companies, users } from '@/db/schema';
-import { ok, type ActionResult } from '@/lib/actions/result';
-import { requireSuperadminSession } from '@/lib/auth/guards';
+import type { ActionResult } from '@/lib/actions/result';
+import {
+  requireSuperadminSession,
+  resolveSuperadminSession,
+} from '@/lib/auth/guards';
 import { SYSTEM_LOGS_CACHE_TAG } from '@/lib/fetchers/cache-tags';
 import {
   createIlikeSearch,
   type SearchOptionsType,
 } from '@/lib/fetchers/search';
-import { fetchTable, type TableResponse } from '@/lib/fetchers/table';
-import { dataTableQuerySchema } from '@/lib/table/types';
+import {
+  fetchTable,
+  type TableQueryPaginationType,
+  type TableResponse,
+  type TableRowCountModeType,
+} from '@/lib/fetchers/table';
+import { createDataTableQueryWithSearchSchema } from '@/lib/table/types';
 import type { SystemLogType } from '@/types';
 
 /**
@@ -29,17 +37,10 @@ import type { SystemLogType } from '@/types';
  * - `createIlikeSearch` usage for typed search fields/options.
  * - `fetchTable` call pattern (validation/auth/pagination/error handling).
  */
-type QueryPaginationType = {
-  limit: number;
-  offset: number;
-};
-
 const DEFAULT_ORDER_BY = [desc(activityLogs.created_at)] as const;
 
 /** Input schema for system logs table fetch (pagination + optional query `q`). */
-const SYSTEM_LOGS_QUERY_SCHEMA = dataTableQuerySchema.extend({
-  q: z.string().trim().max(100).optional(),
-});
+const SYSTEM_LOGS_QUERY_SCHEMA = createDataTableQueryWithSearchSchema();
 
 /** Query type is derived from schema to avoid type/schema drift. */
 type SystemLogsTableQueryType = z.infer<typeof SYSTEM_LOGS_QUERY_SCHEMA>;
@@ -70,14 +71,12 @@ const systemLogSearch = createIlikeSearch({
   defaultFields: DEFAULT_SYSTEM_LOG_SEARCH_FIELDS,
 });
 
-type RowCountModeType = 'exact' | 'none';
-
 /** Optional per-call overrides for system logs fetcher behavior. */
 type FetchSystemLogsOptionsType = SearchOptionsType<
   typeof SYSTEM_LOG_SEARCH_MAP
 > & {
   /** Optional count strategy: `none` can reduce query cost on very large datasets. */
-  row_count_mode?: RowCountModeType;
+  row_count_mode?: TableRowCountModeType;
 };
 
 /** Minimal row selection from joined tables for system logs table responses. */
@@ -113,7 +112,7 @@ function buildSystemLogBaseSelect(whereClause: SQL | undefined) {
 function getSystemLogRows(
   whereClause: SQL | undefined,
   orderBy: typeof DEFAULT_ORDER_BY,
-  pagination: QueryPaginationType,
+  pagination: TableQueryPaginationType,
 ) {
   return buildSystemLogBaseSelect(whereClause)
     .orderBy(...orderBy)
@@ -172,7 +171,9 @@ export async function fetchSystemLogsTable(
     pagination: {
       rowCountMode,
     },
-    authorize: session ? async () => ok(session) : requireSuperadminSession,
+    authorize: session
+      ? async () => resolveSuperadminSession(session)
+      : requireSuperadminSession,
     table: {
       buildWhere: (_, query) =>
         systemLogSearch.buildWhere(query.q, searchFields),

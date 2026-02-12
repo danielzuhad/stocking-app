@@ -7,7 +7,14 @@ import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
 import { getErrorPresentation } from '@/lib/errors/presentation';
 import { dataTableQuerySchema, type DataTableQuery } from '@/lib/table/types';
 
-type TableRowCountMode = 'exact' | 'none';
+export type TableRowCountModeType = 'exact' | 'none';
+
+export type TableQueryPaginationType = {
+  pageIndex: number;
+  pageSize: number;
+  limit: number;
+  offset: number;
+};
 
 type TableMeta = {
   pageIndex: number;
@@ -16,7 +23,7 @@ type TableMeta = {
   pageCount: number;
   hasNextPage: boolean;
   hasPrevPage: boolean;
-  rowCountMode: TableRowCountMode;
+  rowCountMode: TableRowCountModeType;
 };
 
 export type TableResponse<TData> = {
@@ -28,14 +35,7 @@ type TablePaginationOptions = {
   /** Hard cap for page size (useful to prevent expensive queries). */
   maxPageSize?: number;
   /** Skip `count(*)` when set to `none` (meta will be best-effort). */
-  rowCountMode?: TableRowCountMode;
-};
-
-type TablePagination = {
-  pageIndex: number;
-  pageSize: number;
-  limit: number;
-  offset: number;
+  rowCountMode?: TableRowCountModeType;
 };
 
 /**
@@ -90,7 +90,7 @@ type TableFetcherOptions<
       ctx: TContext,
       where: TWhere,
       orderBy: TOrderBy,
-      pagination: TablePagination,
+      pagination: TableQueryPaginationType,
     ) => Promise<TRowDb[]>;
     serializeRow: (row: TRowDb, ctx: TContext) => TRow;
   };
@@ -114,7 +114,7 @@ function normalizeQuery<T extends DataTableQuery>(
   return { ...query, pageSize: maxPageSize };
 }
 
-function getPagination(query: DataTableQuery): TablePagination {
+function getPagination(query: DataTableQuery): TableQueryPaginationType {
   const limit = query.pageSize;
   const offset = query.pageIndex * query.pageSize;
 
@@ -128,7 +128,7 @@ function getPagination(query: DataTableQuery): TablePagination {
 
 function getRowCountMeta(
   rowCount: number,
-  pagination: TablePagination,
+  pagination: TableQueryPaginationType,
 ): Pick<TableMeta, 'pageCount' | 'hasNextPage' | 'hasPrevPage'> {
   const pageCount =
     rowCount === 0 ? 0 : Math.ceil(rowCount / pagination.pageSize);
@@ -139,7 +139,7 @@ function getRowCountMeta(
 }
 
 function getApproximateMeta(
-  pagination: TablePagination,
+  pagination: TableQueryPaginationType,
   rowsLength: number,
 ): Pick<TableMeta, 'pageCount' | 'hasNextPage' | 'hasPrevPage'> {
   const hasNextPage = rowsLength === pagination.pageSize;

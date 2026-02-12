@@ -22,9 +22,76 @@ async function getAuthSession(): Promise<Session | null> {
  * Returns `UNAUTHENTICATED` instead of throwing so callers can handle expected
  * errors via `ActionResult`.
  */
-async function requireAuthSession(): Promise<ActionResult<Session>> {
+export async function requireAuthSession(): Promise<ActionResult<Session>> {
   const session = await getAuthSession();
   if (!session) return err('UNAUTHENTICATED', 'Kamu harus login.');
+  return ok(session);
+}
+
+type ActiveCompanyScopeType = {
+  company_id: string;
+};
+
+type ActiveCompanyScopeMessagesType = {
+  superadmin_missing_company?: string;
+  missing_company?: string;
+};
+
+const DEFAULT_SUPERADMIN_MISSING_COMPANY_MESSAGE =
+  'Pilih company impersonation dulu.';
+const DEFAULT_MISSING_COMPANY_MESSAGE = 'Company aktif tidak ditemukan.';
+
+/**
+ * Resolves active company scope from an authenticated session.
+ *
+ * Rules:
+ * - `SUPERADMIN` must impersonate a company first (`active_company_id` required).
+ * - non-superadmin users must also have `active_company_id`.
+ */
+export function resolveActiveCompanyScopeFromSession(
+  session: Session,
+  messages?: ActiveCompanyScopeMessagesType,
+): ActionResult<ActiveCompanyScopeType> {
+  if (!session.active_company_id) {
+    if (session.user.system_role === 'SUPERADMIN') {
+      return err(
+        'FORBIDDEN',
+        messages?.superadmin_missing_company ??
+          DEFAULT_SUPERADMIN_MISSING_COMPANY_MESSAGE,
+      );
+    }
+
+    return err(
+      'FORBIDDEN',
+      messages?.missing_company ?? DEFAULT_MISSING_COMPANY_MESSAGE,
+    );
+  }
+
+  return ok({ company_id: session.active_company_id });
+}
+
+/**
+ * Requires both authentication and active company scope.
+ */
+export async function requireActiveCompanyScope(
+  messages?: ActiveCompanyScopeMessagesType,
+): Promise<ActionResult<ActiveCompanyScopeType>> {
+  const sessionResult = await requireAuthSession();
+  if (!sessionResult.ok) return sessionResult;
+
+  return resolveActiveCompanyScopeFromSession(sessionResult.data, messages);
+}
+
+/**
+ * Resolves `SUPERADMIN` role from an already-authenticated session.
+ */
+export function resolveSuperadminSession(
+  session: Session,
+): ActionResult<Session> {
+  if (session.user.system_role !== 'SUPERADMIN') {
+    return err('FORBIDDEN', 'Akses ditolak.');
+  }
+
   return ok(session);
 }
 
@@ -38,9 +105,5 @@ export async function requireSuperadminSession(): Promise<ActionResult<Session>>
   const sessionResult = await requireAuthSession();
   if (!sessionResult.ok) return sessionResult;
 
-  if (sessionResult.data.user.system_role !== 'SUPERADMIN') {
-    return err('FORBIDDEN', 'Akses ditolak.');
-  }
-
-  return sessionResult;
+  return resolveSuperadminSession(sessionResult.data);
 }

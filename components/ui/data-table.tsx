@@ -424,7 +424,7 @@ export function DataTable<TData, TValue>({
         aria-busy={isLoading || undefined}
       >
         {showLoadingOverlay ? (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/45">
+          <div className="bg-background/45 pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
             <div className="bg-background text-foreground inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs shadow-sm">
               <Spinner className="size-3.5" />
               {loadingText}

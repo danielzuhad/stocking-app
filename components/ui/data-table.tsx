@@ -94,7 +94,6 @@ export type DataTableProps<TData, TValue> = {
   /** Empty state copy. */
   emptyTitle?: string;
   emptyDescription?: string;
-
 };
 
 export type DataTableColumnHeaderProps<TData> = {
@@ -323,8 +322,7 @@ export function DataTable<TData, TValue>({
   const isPaginationControlled = controlledPagination !== undefined;
   const totalCount = rowCount ?? data.length;
   const pageCount = Math.max(1, Math.ceil(totalCount / pagination.pageSize));
-  const isManualPagination =
-    !enablePagination || typeof rowCount === 'number';
+  const isManualPagination = !enablePagination || typeof rowCount === 'number';
 
   const handlePaginationChange = React.useCallback<OnChangeFn<PaginationState>>(
     (updater) => {
@@ -358,11 +356,7 @@ export function DataTable<TData, TValue>({
       pageIndex: initialPageIndex,
       pageSize: initialPageSize,
     });
-  }, [
-    isPaginationControlled,
-    initialPageIndex,
-    initialPageSize,
-  ]);
+  }, [isPaginationControlled, initialPageIndex, initialPageSize]);
 
   // TanStack Table hook is safe here; we accept React Compiler skipping memoization.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -398,15 +392,11 @@ export function DataTable<TData, TValue>({
     <div className="space-y-4">
       {enableToolbar ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex-1" />
+          {toolbarActions}
 
-          <div className="flex items-center justify-end gap-2">
-            {toolbarActions}
-
-            {enableColumnVisibility ? (
-              <DataTableViewOptions table={table} />
-            ) : null}
-          </div>
+          {enableColumnVisibility ? (
+            <DataTableViewOptions table={table} />
+          ) : null}
         </div>
       ) : null}
 

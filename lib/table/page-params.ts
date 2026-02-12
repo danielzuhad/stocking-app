@@ -73,3 +73,26 @@ export function getDataTableQueryFromSearchParams(
     pageSize: parsePageSize(pageSizeParam, defaultPageSize, pageSizeOptions),
   };
 }
+
+type TextQueryFromSearchParamsOptions = {
+  maxLength?: number;
+};
+
+/**
+ * Reads an optional text query from URL params and returns a trimmed value.
+ *
+ * Empty values are normalized to `undefined`.
+ */
+export function getTextQueryFromSearchParams(
+  searchParams: PageSearchParams,
+  key: string,
+  options?: TextQueryFromSearchParamsOptions,
+): string | undefined {
+  const rawValue = getSearchParam(searchParams, key);
+  const value = rawValue?.trim();
+  if (!value) return undefined;
+
+  const maxLength = options?.maxLength ?? 100;
+  if (maxLength <= 0) return value;
+  return value.slice(0, maxLength);
+}

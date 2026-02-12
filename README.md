@@ -163,7 +163,11 @@ bun run test:coverage
 ```
 
 - Konfigurasi: `jest.config.js` + `jest.setup.ts`
-- Konvensi file test: `__tests__/*` atau `*.test.ts(x)`
+- Konvensi file test: colocated `*.test.ts(x)` di folder fitur/komponen terkait.
+- Untuk shared hook/komponen, pakai struktur folderized module (contoh):
+  - `hooks/use-data-table-url-pagination/use-data-table-url-pagination.ts`
+  - `hooks/use-data-table-url-pagination/use-data-table-url-pagination.test.ts`
+  - optional re-export: `hooks/use-data-table-url-pagination/index.ts`
 
 ### Environment Variables (draft)
 

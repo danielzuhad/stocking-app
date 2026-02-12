@@ -2,6 +2,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { requireSuperadminSession } from '@/lib/auth/guards';
 import {
   getDataTableQueryFromSearchParams,
+  getTextQueryFromSearchParams,
   type PageSearchParams,
 } from '@/lib/table/page-params';
 
@@ -31,8 +32,12 @@ export default async function SystemLogsPage({
     resolvedSearchParams,
     URL_STATE_KEY,
   );
+  const q = getTextQueryFromSearchParams(resolvedSearchParams, 'q');
 
-  const logsResult = await fetchSystemLogsTable(query, sessionResult.data);
+  const logsResult = await fetchSystemLogsTable(
+    { ...query, q },
+    sessionResult.data,
+  );
   if (!logsResult.ok) {
     return (
       <EmptyState title="System Logs" description={logsResult.error.message} />

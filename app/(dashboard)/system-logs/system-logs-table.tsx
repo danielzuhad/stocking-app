@@ -2,11 +2,12 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 
+import InputSearch from '@/components/input-search';
 import { Badge } from '@/components/ui/badge';
 import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table';
-import { useDataTableUrlPagination } from '@/hooks/use-data-table-url-pagination';
-import type { SystemLogRowType } from '@/types';
+import { useDataTableUrlPagination } from '@/hooks/use-data-table-url-pagination/use-data-table-url-pagination';
 import { formatDateTime } from '@/lib/utils';
+import type { SystemLogRowType } from '@/types';
 
 const URL_STATE_KEY = 'dt_system_logs';
 
@@ -99,6 +100,7 @@ export function SystemLogsTable({
     <DataTable
       columns={columns}
       data={data}
+      toolbarActions={<InputSearch />}
       rowCount={rowCount}
       pagination={pagination}
       onPaginationChange={onPaginationChange}

@@ -391,7 +391,12 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
 
 - Runner: Jest + React Testing Library.
 - Konvensi:
-  - simpan test di `__tests__/` atau gunakan nama file `*.test.ts(x)`
+  - simpan test secara **colocated** di folder fitur/komponen terkait (contoh: `components/input-search/input-search.test.tsx`)
+  - untuk shared hook/komponen, gunakan pola folderized module:
+    - `hooks/<feature>/<feature>.ts`
+    - `hooks/<feature>/<feature>.test.ts`
+    - (opsional) `hooks/<feature>/index.ts` untuk re-export API public
+  - gunakan nama file `*.test.ts(x)`; hindari folder `__tests__/` kecuali untuk test lintas fitur yang memang butuh centralization
   - fokus ke perilaku (render, interaksi, edge case), bukan implementasi internal
 - Prioritas test:
   - pure function (pricing/diskon, perhitungan diff opname, validasi rule) → unit test

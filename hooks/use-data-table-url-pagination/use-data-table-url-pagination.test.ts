@@ -1,7 +1,7 @@
 import {
   buildUrlPaginationQuery,
   parseUrlPagination,
-} from '@/hooks/use-data-table-url-pagination';
+} from '@/hooks/use-data-table-url-pagination/use-data-table-url-pagination';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@/lib/table/constants';
 
 const TEST_URL_STATE_KEY = 'dt_any_service';

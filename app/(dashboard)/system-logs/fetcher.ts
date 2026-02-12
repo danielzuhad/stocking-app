@@ -3,22 +3,44 @@ import 'server-only';
 import type { SQL } from 'drizzle-orm';
 import { desc, eq, sql } from 'drizzle-orm';
 import type { Session } from 'next-auth';
+import { z } from 'zod';
 
 import { db } from '@/db';
 import { activityLogs, companies, users } from '@/db/schema';
 import { ok, type ActionResult } from '@/lib/actions/result';
 import { requireSuperadminSession } from '@/lib/auth/guards';
 import { fetchTable, type TableResponse } from '@/lib/fetchers/table';
-import type { DataTableQuery } from '@/lib/table/types';
+import { dataTableQuerySchema, type DataTableQuery } from '@/lib/table/types';
 import type { SystemLogDbRowType, SystemLogRowType } from '@/types';
 
 const DEFAULT_ORDER_BY = [desc(activityLogs.created_at)] as const;
+const SYSTEM_LOGS_QUERY_SCHEMA = dataTableQuerySchema.extend({
+  q: z.string().trim().max(100).optional(),
+});
+
+type SystemLogsTableQueryType = DataTableQuery & {
+  q?: string;
+};
 
 function serializeSystemLogRow(row: SystemLogDbRowType): SystemLogRowType {
   return {
     ...row,
     created_at: row.created_at.toISOString(),
   };
+}
+
+function buildSearchWhere(query: SystemLogsTableQueryType): SQL | undefined {
+  if (!query.q) return undefined;
+
+  const search = `%${query.q}%`;
+  return sql`(
+    ${activityLogs.action} ILIKE ${search}
+    OR ${users.username} ILIKE ${search}
+    OR ${companies.name} ILIKE ${search}
+    OR ${companies.slug} ILIKE ${search}
+    OR COALESCE(${activityLogs.target_type}, '') ILIKE ${search}
+    OR COALESCE(${activityLogs.target_id}, '') ILIKE ${search}
+  )`;
 }
 
 /**
@@ -29,16 +51,17 @@ function serializeSystemLogRow(row: SystemLogDbRowType): SystemLogRowType {
  * - `SUPERADMIN` role
  */
 export async function fetchSystemLogsTable(
-  input: DataTableQuery,
+  input: SystemLogsTableQueryType,
   session?: Session,
 ): Promise<ActionResult<TableResponse<SystemLogRowType>>> {
   return fetchTable({
     input,
+    schema: SYSTEM_LOGS_QUERY_SCHEMA,
     authorize: session
       ? async () => ok(session)
       : requireSuperadminSession,
     table: {
-      buildWhere: (): SQL | undefined => undefined,
+      buildWhere: (_, query): SQL | undefined => buildSearchWhere(query),
       buildOrderBy: () => DEFAULT_ORDER_BY,
       getRowCount: async (_, whereClause) => {
         const [{ count }] = await db

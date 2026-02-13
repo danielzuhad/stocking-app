@@ -36,3 +36,22 @@ export function formatDateTime(
     return value.toISOString();
   }
 }
+
+/**
+ * Converts optional text input into nullable trimmed value.
+ *
+ * - `undefined` or blank (`''`) become `null`
+ * - non-empty string is trimmed
+ */
+export function toNullableTrimmedText(value: string | undefined): string | null {
+  if (value === undefined) return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/**
+ * Converts number input to fixed-scale decimal text for SQL `numeric`.
+ */
+export function toFixedScaleNumberText(value: number, scale = 2): string {
+  return value.toFixed(scale);
+}

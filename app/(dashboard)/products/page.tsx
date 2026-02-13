@@ -1,4 +1,8 @@
+import Link from 'next/link';
+
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
+import { requireAuthSession } from '@/lib/auth/guards';
 import {
   getDataTableQueryFromSearchParams,
   getTextQueryFromSearchParams,
@@ -16,6 +20,10 @@ export default async function ProductsPage({
 }: {
   searchParams: PageSearchParams;
 }) {
+  const sessionResult = await requireAuthSession();
+  const can_write =
+    sessionResult.ok && sessionResult.data.user.system_role !== 'STAFF';
+
   const resolvedSearchParams = await Promise.resolve(searchParams);
   const query = getDataTableQueryFromSearchParams(
     resolvedSearchParams,
@@ -28,10 +36,7 @@ export default async function ProductsPage({
   });
   if (!productsResult.ok) {
     return (
-      <EmptyState
-        title="Products"
-        description={productsResult.error.message}
-      />
+      <EmptyState title="Products" description={productsResult.error.message} />
     );
   }
 
@@ -39,11 +44,25 @@ export default async function ProductsPage({
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Products</h1>
+          <p className="text-muted-foreground text-sm">
+            Kelola master produk, varian, dan image.
+          </p>
+        </div>
+        {can_write ? (
+          <Button asChild>
+            <Link href="/products/new">Create Product</Link>
+          </Button>
+        ) : null}
+      </div>
       <ProductsTable
         data={data}
         rowCount={meta.rowCount}
         initialPageIndex={meta.pageIndex}
         initialPageSize={meta.pageSize}
+        can_write={can_write}
       />
     </div>
   );

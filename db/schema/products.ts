@@ -1,5 +1,6 @@
 import {
   index,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -9,6 +10,14 @@ import {
 
 import { companies } from './companies';
 import { users } from './users';
+
+type ProductImageMetaType = {
+  file_id: string;
+  url: string;
+  thumbnail_url?: string;
+  width?: number;
+  height?: number;
+};
 
 export const productStatusEnum = pgEnum('product_status', ['ACTIVE', 'INACTIVE']);
 export const productCategoryEnum = pgEnum('product_category', [
@@ -26,6 +35,7 @@ export const products = pgTable(
       .notNull(),
     name: text('name').notNull(),
     category: productCategoryEnum('category').default('GENERAL').notNull(),
+    image: jsonb('image').$type<ProductImageMetaType | null>(),
     unit: text('unit').notNull(),
     status: productStatusEnum('status').default('ACTIVE').notNull(),
     created_at: timestamp('created_at', { withTimezone: true })

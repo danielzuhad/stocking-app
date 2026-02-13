@@ -24,13 +24,21 @@ type LogActivityInput = {
 } & ActivityLogTarget;
 
 /**
+ * Minimal DB client contract needed for audit insert.
+ *
+ * Supports both the root `db` client and Drizzle transaction client (`tx`)
+ * so audit logging can stay atomic with domain mutations.
+ */
+type AuditDbClientType = Pick<typeof db, 'insert'>;
+
+/**
  * Writes an append-only activity log entry.
  *
  * Prefer calling this inside the same DB transaction as the business mutation
  * so the audit trail is consistent and atomic.
  */
 export async function logActivity(
-  client: typeof db,
+  client: AuditDbClientType,
   input: LogActivityInput,
 ): Promise<void> {
   await client.insert(activityLogs).values({

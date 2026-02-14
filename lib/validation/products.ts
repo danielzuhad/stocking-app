@@ -1,14 +1,18 @@
 import { z } from 'zod';
 
-/** Supported product categories for current MVP. */
-export const PRODUCT_CATEGORY_OPTIONS = [
-  'FASHION',
-  'COSMETIC',
-  'GENERAL',
-] as const;
+import {
+  PRODUCT_DEFAULT_CATEGORY,
+  PRODUCT_ENUM_VALUES,
+} from '@/lib/products/enums';
 
-/** Supported product status values for current MVP. */
-export const PRODUCT_STATUS_OPTIONS = ['ACTIVE', 'INACTIVE'] as const;
+/** Supported product categories (single source from shared enum values). */
+export const PRODUCT_CATEGORY_OPTIONS = PRODUCT_ENUM_VALUES.category;
+/** Supported product status values (single source from shared enum values). */
+export const PRODUCT_STATUS_OPTIONS = PRODUCT_ENUM_VALUES.status;
+/** Supported product unit values (single source from shared enum values). */
+export const PRODUCT_UNIT_OPTIONS = PRODUCT_ENUM_VALUES.unit;
+/** Category currently locked for this MVP phase. */
+export const PRODUCT_LOCKED_CATEGORY = PRODUCT_DEFAULT_CATEGORY;
 
 /**
  * Optional text validator (trimmed).
@@ -46,7 +50,7 @@ export const productFormSchema = z
   .object({
     name: z.string().trim().min(1, 'Nama produk wajib diisi.').max(160),
     category: z.enum(PRODUCT_CATEGORY_OPTIONS),
-    unit: z.string().trim().min(1, 'Satuan wajib diisi.').max(40),
+    unit: z.enum(PRODUCT_UNIT_OPTIONS),
     status: z.enum(PRODUCT_STATUS_OPTIONS),
     image: productImageSchema.nullable(),
     has_variants: z.boolean(),
@@ -107,6 +111,97 @@ export const productFormSchema = z
 export type ProductImageInputType = z.infer<typeof productImageSchema>;
 export type ProductVariantFormValueType = z.infer<typeof productVariantFormSchema>;
 export type ProductFormValuesType = z.infer<typeof productFormSchema>;
+
+/**
+ * Returns one empty starter variant row for product form UX.
+ */
+export function createEmptyProductVariant(options?: {
+  is_default?: boolean;
+}): ProductVariantFormValueType {
+  return {
+    name: '',
+    selling_price: 0,
+    sku: '',
+    barcode: '',
+    is_default: options?.is_default ?? false,
+  };
+}
+
+/**
+ * Checks whether variant row is still blank and can be ignored on submit.
+ */
+export function isProductVariantBlank(
+  variant: ProductVariantFormValueType,
+): boolean {
+  return (
+    !variant.name?.trim() &&
+    !variant.sku?.trim() &&
+    !variant.barcode?.trim() &&
+    Number(variant.selling_price) === 0
+  );
+}
+
+/**
+ * Normalizes product form payload so one empty starter row does not force variant mode.
+ */
+export function normalizeProductFormPayload(
+  values: ProductFormValuesType,
+): ProductFormValuesType {
+  const meaningfulVariants = values.variants.filter(
+    (variant) => !isProductVariantBlank(variant),
+  );
+
+  if (meaningfulVariants.length === 0) {
+    return {
+      ...values,
+      has_variants: false,
+      variants: [],
+    };
+  }
+
+  const requestedDefaultIndex = meaningfulVariants.findIndex((variant) =>
+    Boolean(variant.is_default),
+  );
+  const defaultIndex = requestedDefaultIndex >= 0 ? requestedDefaultIndex : 0;
+
+  return {
+    ...values,
+    has_variants: true,
+    variants: meaningfulVariants.map((variant, index) => ({
+      ...variant,
+      is_default: index === defaultIndex,
+    })),
+  };
+}
+
+type ProductVariantInferenceInputType = {
+  is_default: boolean;
+  name: string;
+  selling_price: string | number;
+  sku: string | null;
+  barcode: string | null;
+};
+
+/**
+ * Heuristic for deciding whether form should open in multi-variant mode.
+ */
+export function inferProductHasVariants(
+  variants: ProductVariantInferenceInputType[],
+): boolean {
+  if (variants.length > 1) return true;
+  if (variants.length === 0) return false;
+
+  const [variant] = variants;
+  if (!variant) return false;
+
+  return (
+    !variant.is_default ||
+    variant.name !== 'Default' ||
+    Number(variant.selling_price) !== 0 ||
+    variant.sku !== null ||
+    variant.barcode !== null
+  );
+}
 
 /** Validation schema for create product action. */
 export const createProductSchema = productFormSchema;

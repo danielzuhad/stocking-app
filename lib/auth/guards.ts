@@ -40,6 +40,7 @@ type ActiveCompanyScopeMessagesType = {
 const DEFAULT_SUPERADMIN_MISSING_COMPANY_MESSAGE =
   'Pilih company impersonation dulu.';
 const DEFAULT_MISSING_COMPANY_MESSAGE = 'Company aktif tidak ditemukan.';
+const DEFAULT_STAFF_FORBIDDEN_MESSAGE = 'Akses ditolak.';
 
 /**
  * Resolves active company scope from an authenticated session.
@@ -80,6 +81,54 @@ export async function requireActiveCompanyScope(
   if (!sessionResult.ok) return sessionResult;
 
   return resolveActiveCompanyScopeFromSession(sessionResult.data, messages);
+}
+
+type NonStaffActiveCompanyScopeType = {
+  session: Session;
+  company_id: string;
+};
+
+type NonStaffActiveCompanyScopeMessagesType = ActiveCompanyScopeMessagesType & {
+  staff_forbidden?: string;
+};
+
+/**
+ * Resolves authenticated company scope for users allowed to write/operate data.
+ *
+ * Rules:
+ * - `STAFF` is denied by default (customizable message).
+ * - `ADMIN` and `SUPERADMIN` must still have valid `active_company_id`.
+ */
+export function resolveNonStaffActiveCompanyScopeFromSession(
+  session: Session,
+  messages?: NonStaffActiveCompanyScopeMessagesType,
+): ActionResult<NonStaffActiveCompanyScopeType> {
+  if (session.user.system_role === 'STAFF') {
+    return err(
+      'FORBIDDEN',
+      messages?.staff_forbidden ?? DEFAULT_STAFF_FORBIDDEN_MESSAGE,
+    );
+  }
+
+  const scopeResult = resolveActiveCompanyScopeFromSession(session, messages);
+  if (!scopeResult.ok) return scopeResult;
+
+  return ok({
+    session,
+    company_id: scopeResult.data.company_id,
+  });
+}
+
+/**
+ * Requires authenticated non-staff user with valid active company scope.
+ */
+export async function requireNonStaffActiveCompanyScope(
+  messages?: NonStaffActiveCompanyScopeMessagesType,
+): Promise<ActionResult<NonStaffActiveCompanyScopeType>> {
+  const sessionResult = await requireAuthSession();
+  if (!sessionResult.ok) return sessionResult;
+
+  return resolveNonStaffActiveCompanyScopeFromSession(sessionResult.data, messages);
 }
 
 /**

@@ -7,10 +7,10 @@ import { z } from 'zod';
 
 import { db } from '@/db';
 import { activityLogs, users } from '@/db/schema';
-import { err, type ActionResult } from '@/lib/actions/result';
+import { ok, type ActionResult } from '@/lib/actions/result';
 import {
   requireAuthSession,
-  resolveActiveCompanyScopeFromSession,
+  resolveNonStaffActiveCompanyScopeFromSession,
 } from '@/lib/auth/guards';
 import {
   createIlikeSearch,
@@ -88,15 +88,14 @@ const ACTIVITY_LOG_ROW_SELECT = {
 function resolveActivityLogContextFromSession(
   session: Session,
 ): ActionResult<ActivityLogContextType> {
-  const systemRole = session.user.system_role;
-  if (systemRole === 'STAFF') {
-    return err('FORBIDDEN', 'Akses activity logs hanya untuk admin.');
-  }
-
-  return resolveActiveCompanyScopeFromSession(session, {
+  const scopeResult = resolveNonStaffActiveCompanyScopeFromSession(session, {
+    staff_forbidden: 'Akses activity logs hanya untuk admin.',
     superadmin_missing_company:
       'Pilih company impersonation dulu untuk melihat activity logs.',
   });
+  if (!scopeResult.ok) return scopeResult;
+
+  return ok({ company_id: scopeResult.data.company_id });
 }
 
 /**

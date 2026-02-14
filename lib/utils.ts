@@ -55,3 +55,38 @@ export function toNullableTrimmedText(value: string | undefined): string | null 
 export function toFixedScaleNumberText(value: number, scale = 2): string {
   return value.toFixed(scale);
 }
+
+/**
+ * Converts arbitrary text into safe lowercase slug segment.
+ */
+export function toSafeSlugSegment(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+/**
+ * Appends ImageKit transform directives to URL using `tr` query param.
+ *
+ * Returns input URL unchanged for non-HTTP URLs or malformed values.
+ */
+export function buildImageKitTransformUrl(
+  url: string,
+  transforms: string[],
+): string {
+  if (!url.startsWith('http://') && !url.startsWith('https://')) return url;
+
+  try {
+    const parsedUrl = new URL(url);
+    if (!parsedUrl.hostname.includes('imagekit.io')) return url;
+
+    parsedUrl.searchParams.set('tr', transforms.join(','));
+    return parsedUrl.toString();
+  } catch {
+    return url;
+  }
+}

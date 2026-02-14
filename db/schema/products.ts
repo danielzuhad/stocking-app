@@ -3,10 +3,17 @@ import {
   jsonb,
   pgEnum,
   pgTable,
-  text,
   timestamp,
+  text,
   uuid,
 } from 'drizzle-orm/pg-core';
+
+import {
+  PRODUCT_DEFAULT_CATEGORY,
+  PRODUCT_DEFAULT_STATUS,
+  PRODUCT_DEFAULT_UNIT,
+  PRODUCT_ENUM_VALUES,
+} from '@/lib/products/enums';
 
 import { companies } from './companies';
 import { users } from './users';
@@ -19,12 +26,15 @@ type ProductImageMetaType = {
   height?: number;
 };
 
-export const productStatusEnum = pgEnum('product_status', ['ACTIVE', 'INACTIVE']);
-export const productCategoryEnum = pgEnum('product_category', [
-  'FASHION',
-  'COSMETIC',
-  'GENERAL',
-]);
+export const productStatusEnum = pgEnum(
+  'product_status',
+  PRODUCT_ENUM_VALUES.status,
+);
+export const productCategoryEnum = pgEnum(
+  'product_category',
+  PRODUCT_ENUM_VALUES.category,
+);
+export const productUnitEnum = pgEnum('product_unit', PRODUCT_ENUM_VALUES.unit);
 
 export const products = pgTable(
   'products',
@@ -34,10 +44,12 @@ export const products = pgTable(
       .references(() => companies.id)
       .notNull(),
     name: text('name').notNull(),
-    category: productCategoryEnum('category').default('GENERAL').notNull(),
+    category: productCategoryEnum('category')
+      .default(PRODUCT_DEFAULT_CATEGORY)
+      .notNull(),
     image: jsonb('image').$type<ProductImageMetaType | null>(),
-    unit: text('unit').notNull(),
-    status: productStatusEnum('status').default('ACTIVE').notNull(),
+    unit: productUnitEnum('unit').default(PRODUCT_DEFAULT_UNIT).notNull(),
+    status: productStatusEnum('status').default(PRODUCT_DEFAULT_STATUS).notNull(),
     created_at: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

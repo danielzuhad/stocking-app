@@ -8,6 +8,7 @@ import { products, productVariants } from '@/db/schema';
 import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
 import { logActivity } from '@/lib/audit';
 import { getErrorPresentation } from '@/lib/errors/presentation';
+import { PRODUCT_DEFAULT_CATEGORY } from '@/lib/products/enums';
 import { toFixedScaleNumberText, toNullableTrimmedText } from '@/lib/utils';
 import {
   createProductSchema,
@@ -199,7 +200,7 @@ export async function createProductAction(
         .values({
           company_id,
           name: parsed.data.name,
-          category: parsed.data.category,
+          category: PRODUCT_DEFAULT_CATEGORY,
           image: parsed.data.image,
           unit: parsed.data.unit,
           status: parsed.data.status,
@@ -321,7 +322,7 @@ export async function updateProductAction(
         .update(products)
         .set({
           name: parsed.data.name,
-          category: parsed.data.category,
+          category: PRODUCT_DEFAULT_CATEGORY,
           image: parsed.data.image,
           unit: parsed.data.unit,
           status: parsed.data.status,

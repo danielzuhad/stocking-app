@@ -8,7 +8,7 @@ import { z } from 'zod';
  */
 
 /** Canonical error codes for server actions (stable contract for UI handling). */
-type ActionErrorCode =
+export type ActionErrorCode =
   | 'UNAUTHENTICATED'
   | 'FORBIDDEN'
   | 'INVALID_INPUT'
@@ -64,4 +64,20 @@ export function errFromZod(
       field_errors: error.flatten().fieldErrors,
     },
   };
+}
+
+/**
+ * Maps `ActionErrorCode` into conventional HTTP status code.
+ *
+ * Use this in route handlers that return `ActionResult` JSON payloads.
+ */
+export function getHttpStatusByActionErrorCode(
+  code: ActionErrorCode | string,
+): number {
+  if (code === 'UNAUTHENTICATED') return 401;
+  if (code === 'FORBIDDEN') return 403;
+  if (code === 'INVALID_INPUT') return 400;
+  if (code === 'NOT_FOUND') return 404;
+  if (code === 'CONFLICT') return 409;
+  return 500;
 }

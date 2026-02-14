@@ -53,7 +53,7 @@ export default async function ProductsPage({
         </div>
         {can_write ? (
           <Button asChild>
-            <Link href="/products/new">Create Product</Link>
+            <Link href="/products/new">Tambah Produk</Link>
           </Button>
         ) : null}
       </div>

@@ -18,10 +18,10 @@ export default async function NewProductPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Create Product</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Tambah Produk</h1>
         <p className="text-muted-foreground text-sm">
-          Isi data produk, image, dan mode varian (opsional). Stok tetap
-          dikelola lewat ledger.
+          Lengkapi data dasar, foto produk, dan varian bila diperlukan.
+          Pengelolaan stok dilakukan di modul inventory.
         </p>
       </div>
       <ProductForm mode="create" />

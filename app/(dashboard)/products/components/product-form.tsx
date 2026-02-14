@@ -1,15 +1,15 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ImagePlusIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import { useFieldArray, useForm, useWatch, type Path } from 'react-hook-form';
 import { toast } from 'sonner';
 
-import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -18,29 +18,50 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { ImagePreviewDialog } from '@/components/ui/image-preview-dialog';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Spinner } from '@/components/ui/spinner';
 import type { ActionResult } from '@/lib/actions/result';
 import {
+  PRODUCT_CATEGORY_LABELS,
+  PRODUCT_DEFAULT_STATUS,
+  PRODUCT_DEFAULT_UNIT,
+  PRODUCT_STATUS_LABELS,
+  PRODUCT_UNIT_LABELS,
+} from '@/lib/products/enums';
+import { buildImageKitTransformUrl } from '@/lib/utils';
+import {
+  createEmptyProductVariant,
+  isProductVariantBlank,
+  normalizeProductFormPayload,
   PRODUCT_CATEGORY_OPTIONS,
+  PRODUCT_LOCKED_CATEGORY,
   PRODUCT_STATUS_OPTIONS,
+  PRODUCT_UNIT_OPTIONS,
   productFormSchema,
   type ProductFormValuesType,
-  type ProductVariantFormValueType,
 } from '@/lib/validation/products';
 
 import { createProductAction, updateProductAction } from '../actions';
 import { ProductDeleteButton } from './product-delete-button';
 
-const CATEGORY_LABELS: Record<(typeof PRODUCT_CATEGORY_OPTIONS)[number], string> = {
-  FASHION: 'Fashion',
-  COSMETIC: 'Cosmetic',
-  GENERAL: 'General',
-};
-
-const STATUS_LABELS: Record<(typeof PRODUCT_STATUS_OPTIONS)[number], string> = {
-  ACTIVE: 'Active',
-  INACTIVE: 'Inactive',
-};
+const ALLOWED_PRODUCT_IMAGE_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+] as const;
+const MAX_PRODUCT_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const MIN_PRODUCT_IMAGE_DIMENSION_PX = 120;
+const MAX_PRODUCT_IMAGE_DIMENSION_PX = 6000;
+const MAX_PRODUCT_IMAGE_UPLOAD_DIMENSION_PX = 2000;
+const PRODUCT_IMAGE_WEBP_QUALITY = 0.82;
 
 type ImageKitUploadAuthDataType = {
   token: string;
@@ -49,19 +70,175 @@ type ImageKitUploadAuthDataType = {
   public_key: string;
   url_endpoint: string;
   folder: string;
+  company_tag: string;
+};
+type ProductImageValueType = NonNullable<ProductFormValuesType['image']>;
+type ImageKitUploadResponseType = {
+  fileId?: string;
+  url?: string;
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  message?: string;
 };
 
 /**
- * Returns empty variant input row for the dynamic variants form.
+ * Loads image object from temporary blob URL.
  */
-function createEmptyVariant(): ProductVariantFormValueType {
-  return {
-    name: '',
-    selling_price: 0,
-    sku: '',
-    barcode: '',
-    is_default: false,
-  };
+function loadImageFromObjectUrl(objectUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+    image.src = objectUrl;
+  });
+}
+
+/**
+ * Reads image dimensions without uploading to server.
+ */
+async function readImageDimensions(file: File): Promise<{
+  width: number;
+  height: number;
+}> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImageFromObjectUrl(objectUrl);
+    return {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/**
+ * Uploads file to ImageKit with real-time progress callback.
+ */
+function uploadImageKitFileWithProgress(
+  payload: FormData,
+  onProgress: (progress: number) => void,
+): Promise<ImageKitUploadResponseType> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', 'https://upload.imagekit.io/api/v1/files/upload');
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const progress = Math.min(
+        100,
+        Math.max(0, Math.round((event.loaded / event.total) * 100)),
+      );
+      onProgress(progress);
+    };
+
+    request.onerror = () => {
+      reject(new Error('Gagal menghubungkan ke server upload.'));
+    };
+
+    request.onload = () => {
+      try {
+        const parsedResponse = JSON.parse(
+          request.responseText,
+        ) as ImageKitUploadResponseType;
+        if (request.status < 200 || request.status >= 300) {
+          reject(new Error(parsedResponse.message ?? 'Upload foto gagal.'));
+          return;
+        }
+        onProgress(100);
+        resolve(parsedResponse);
+      } catch {
+        reject(new Error('Gagal membaca respons upload image.'));
+      }
+    };
+
+    request.send(payload);
+  });
+}
+
+/**
+ * Optimizes image client-side (resize + convert to WebP) before upload.
+ */
+async function optimizeImageBeforeUpload(file: File): Promise<File> {
+  const { width, height } = await readImageDimensions(file);
+  const scale = Math.min(
+    1,
+    MAX_PRODUCT_IMAGE_UPLOAD_DIMENSION_PX / width,
+    MAX_PRODUCT_IMAGE_UPLOAD_DIMENSION_PX / height,
+  );
+  const targetWidth = Math.max(1, Math.round(width * scale));
+  const targetHeight = Math.max(1, Math.round(height * scale));
+
+  const shouldResize = targetWidth !== width || targetHeight !== height;
+  const shouldConvertToWebp = file.type !== 'image/webp';
+  if (!shouldResize && !shouldConvertToWebp) return file;
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImageFromObjectUrl(objectUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+
+    const context = canvas.getContext('2d');
+    if (!context) return file;
+
+    context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+    const webpBlob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/webp', PRODUCT_IMAGE_WEBP_QUALITY);
+    });
+    if (!webpBlob) return file;
+
+    const fileNameBase = file.name.replace(/\.[^.]+$/, '');
+    return new File([webpBlob], `${fileNameBase || 'product-image'}.webp`, {
+      type: 'image/webp',
+      lastModified: Date.now(),
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/**
+ * Validates selected image file before upload.
+ */
+function validateImageFile(
+  file: File,
+  dimensions?: { width: number; height: number },
+): void {
+  if (
+    !ALLOWED_PRODUCT_IMAGE_MIME_TYPES.includes(
+      file.type as (typeof ALLOWED_PRODUCT_IMAGE_MIME_TYPES)[number],
+    )
+  ) {
+    throw new Error('File harus berupa gambar.');
+  }
+
+  if (file.size > MAX_PRODUCT_IMAGE_SIZE_BYTES) {
+    throw new Error('Ukuran gambar maksimal 5MB.');
+  }
+
+  if (!dimensions) return;
+
+  if (
+    dimensions.width < MIN_PRODUCT_IMAGE_DIMENSION_PX ||
+    dimensions.height < MIN_PRODUCT_IMAGE_DIMENSION_PX
+  ) {
+    throw new Error(
+      `Dimensi gambar minimal ${MIN_PRODUCT_IMAGE_DIMENSION_PX}x${MIN_PRODUCT_IMAGE_DIMENSION_PX}px.`,
+    );
+  }
+
+  if (
+    dimensions.width > MAX_PRODUCT_IMAGE_DIMENSION_PX ||
+    dimensions.height > MAX_PRODUCT_IMAGE_DIMENSION_PX
+  ) {
+    throw new Error(
+      `Dimensi gambar maksimal ${MAX_PRODUCT_IMAGE_DIMENSION_PX}x${MAX_PRODUCT_IMAGE_DIMENSION_PX}px.`,
+    );
+  }
 }
 
 /**
@@ -79,18 +256,26 @@ export function ProductForm({
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
   const [isImageUploading, setIsImageUploading] = React.useState(false);
+  const [imageUploadProgress, setImageUploadProgress] = React.useState(0);
+  const [pendingImageFile, setPendingImageFile] = React.useState<File | null>(
+    null,
+  );
+  const [pendingImagePreviewUrl, setPendingImagePreviewUrl] = React.useState<
+    string | null
+  >(null);
   const isEditMode = mode === 'edit' && Boolean(product_id);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const form = useForm<ProductFormValuesType>({
     resolver: zodResolver(productFormSchema),
     defaultValues: initial_values ?? {
       name: '',
-      category: 'GENERAL',
-      unit: '',
-      status: 'ACTIVE',
+      category: PRODUCT_LOCKED_CATEGORY,
+      unit: PRODUCT_DEFAULT_UNIT,
+      status: PRODUCT_DEFAULT_STATUS,
       image: null,
       has_variants: false,
-      variants: [createEmptyVariant()],
+      variants: [createEmptyProductVariant({ is_default: true })],
     },
   });
 
@@ -108,23 +293,52 @@ export function ProductForm({
     control: form.control,
     name: 'image',
   });
-  const hasVariants = useWatch({
+  const watchedVariants = useWatch({
     control: form.control,
-    name: 'has_variants',
+    name: 'variants',
   });
 
-  React.useEffect(() => {
-    if (!hasVariants) return;
-    if (fields.length > 0) return;
-    append({
-      ...createEmptyVariant(),
-      is_default: true,
+  const clearPendingImage = React.useCallback(() => {
+    setPendingImageFile(null);
+    setPendingImagePreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
     });
-  }, [append, fields.length, hasVariants]);
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      setPendingImagePreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (fields.length > 0) return;
+    append(createEmptyProductVariant({ is_default: true }));
+  }, [append, fields.length]);
+
+  React.useEffect(() => {
+    const variants = watchedVariants ?? [];
+    const hasMeaningfulVariant = variants.some(
+      (variant) => !isProductVariantBlank(variant),
+    );
+    const currentHasVariants = form.getValues('has_variants');
+    if (currentHasVariants === hasMeaningfulVariant) return;
+
+    form.setValue('has_variants', hasMeaningfulVariant, {
+      shouldDirty: false,
+      shouldTouch: false,
+    });
+  }, [form, watchedVariants]);
 
   const uploadProductImage = React.useCallback(
-    async (file: File): Promise<void> => {
-      const authResponse = await fetch('/api/imagekit/auth', { method: 'POST' });
+    async (file: File): Promise<ProductImageValueType> => {
+      const authResponse = await fetch('/api/imagekit/auth', {
+        method: 'POST',
+      });
       const authResult =
         (await authResponse.json()) as ActionResult<ImageKitUploadAuthDataType>;
       if (!authResult.ok) {
@@ -139,46 +353,49 @@ export function ProductForm({
       payload.append('expire', String(authResult.data.expire));
       payload.append('token', authResult.data.token);
       payload.append('folder', authResult.data.folder);
+      payload.append(
+        'tags',
+        `products,company-${authResult.data.company_tag},module-products`,
+      );
       payload.append('useUniqueFileName', 'true');
 
-      const uploadResponse = await fetch(
-        'https://upload.imagekit.io/api/v1/files/upload',
-        {
-          method: 'POST',
-          body: payload,
-        },
+      const uploadResult = await uploadImageKitFileWithProgress(
+        payload,
+        setImageUploadProgress,
       );
 
-      const uploadResult = (await uploadResponse.json()) as {
-        fileId?: string;
-        url?: string;
-        thumbnailUrl?: string;
-        width?: number;
-        height?: number;
-        message?: string;
-      };
-
-      if (!uploadResponse.ok || !uploadResult.fileId || !uploadResult.url) {
-        throw new Error(uploadResult.message ?? 'Upload image gagal.');
+      if (!uploadResult.fileId || !uploadResult.url) {
+        throw new Error(uploadResult.message ?? 'Upload foto gagal.');
       }
 
-      form.setValue(
-        'image',
-        {
-          file_id: uploadResult.fileId,
-          url: uploadResult.url,
-          thumbnail_url: uploadResult.thumbnailUrl,
-          width: uploadResult.width,
-          height: uploadResult.height,
-        },
-        {
-          shouldDirty: true,
-          shouldTouch: true,
-        },
-      );
+      return {
+        file_id: uploadResult.fileId,
+        url: uploadResult.url,
+        thumbnail_url: uploadResult.thumbnailUrl,
+        width: uploadResult.width,
+        height: uploadResult.height,
+      };
     },
-    [form],
+    [setImageUploadProgress],
   );
+
+  const rollbackUploadedImage = React.useCallback(async (fileId: string) => {
+    try {
+      const response = await fetch('/api/imagekit/files/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ file_id: fileId }),
+      });
+
+      if (!response.ok) {
+        console.error('IMAGEKIT_ROLLBACK_DELETE_FAILED', await response.text());
+      }
+    } catch (error) {
+      console.error('IMAGEKIT_ROLLBACK_DELETE_FAILED', error);
+    }
+  }, []);
 
   const handleImageFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -187,27 +404,84 @@ export function ProductForm({
     if (!file) return;
 
     try {
-      setIsImageUploading(true);
-      await uploadProductImage(file);
-      toast.success('Image produk berhasil diupload.');
+      clearPendingImage();
+      validateImageFile(file);
+      const sourceDimensions = await readImageDimensions(file);
+      validateImageFile(file, sourceDimensions);
+
+      const optimizedFile = await optimizeImageBeforeUpload(file);
+      const optimizedDimensions = await readImageDimensions(optimizedFile);
+      validateImageFile(optimizedFile, optimizedDimensions);
+
+      const nextPreviewUrl = URL.createObjectURL(optimizedFile);
+
+      setPendingImagePreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return nextPreviewUrl;
+      });
+      setPendingImageFile(optimizedFile);
+      toast.success(
+        `Foto siap diupload (${optimizedDimensions.width}x${optimizedDimensions.height}). Upload dilakukan saat simpan produk.`,
+      );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Upload image gagal.');
+      toast.error(
+        error instanceof Error ? error.message : 'File foto tidak valid.',
+      );
     } finally {
-      setIsImageUploading(false);
       event.currentTarget.value = '';
     }
   };
 
   const onSubmit = (values: ProductFormValuesType) => {
     startTransition(async () => {
-      const result = isEditMode
-        ? await updateProductAction({
-            product_id,
-            ...values,
-          })
-        : await createProductAction(values);
+      let normalizedValues = {
+        ...normalizeProductFormPayload(values),
+        category: PRODUCT_LOCKED_CATEGORY,
+      };
+      let uploadedImageFileId: string | null = null;
+
+      try {
+        if (pendingImageFile) {
+          setIsImageUploading(true);
+          setImageUploadProgress(0);
+          const uploadedImage = await uploadProductImage(pendingImageFile);
+          uploadedImageFileId = uploadedImage.file_id;
+          normalizedValues = {
+            ...normalizedValues,
+            image: uploadedImage,
+          };
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Upload foto gagal.',
+        );
+        return;
+      } finally {
+        setIsImageUploading(false);
+        setImageUploadProgress(0);
+      }
+
+      let result: Awaited<ReturnType<typeof createProductAction>>;
+      try {
+        result = isEditMode
+          ? await updateProductAction({
+              product_id,
+              ...normalizedValues,
+            })
+          : await createProductAction(normalizedValues);
+      } catch {
+        if (uploadedImageFileId) {
+          await rollbackUploadedImage(uploadedImageFileId);
+        }
+        toast.error('Sedang ada gangguan sistem. Coba lagi beberapa saat.');
+        return;
+      }
 
       if (!result.ok) {
+        if (uploadedImageFileId) {
+          await rollbackUploadedImage(uploadedImageFileId);
+        }
+
         if (result.error.field_errors) {
           const entries = Object.entries(result.error.field_errors);
           for (const [field, messages] of entries) {
@@ -225,6 +499,7 @@ export function ProductForm({
       toast.success(
         isEditMode ? 'Produk berhasil diperbarui.' : 'Produk berhasil dibuat.',
       );
+      clearPendingImage();
       router.push('/products');
       router.refresh();
     });
@@ -251,25 +526,56 @@ export function ProductForm({
 
       const nextVariants = form.getValues('variants');
       if (nextVariants.length === 0) {
-        append({
-          ...createEmptyVariant(),
-          is_default: true,
-        });
+        append(createEmptyProductVariant({ is_default: true }));
         return;
       }
 
-      if (removedVariant?.is_default || !nextVariants.some((v) => v.is_default)) {
+      if (
+        removedVariant?.is_default ||
+        !nextVariants.some((v) => v.is_default)
+      ) {
         markVariantAsDefault(0);
       }
     },
     [append, form, markVariantAsDefault, remove],
   );
 
+  const variantsError = form.formState.errors.variants;
+  const rawImagePreviewSrc =
+    pendingImagePreviewUrl ?? watchedImage?.thumbnail_url ?? watchedImage?.url;
+  const imagePreviewSrc = rawImagePreviewSrc
+    ? rawImagePreviewSrc.startsWith('blob:')
+      ? rawImagePreviewSrc
+      : buildImageKitTransformUrl(rawImagePreviewSrc, [
+          'w-96',
+          'h-96',
+          'c-at_max',
+          'q-75',
+          'f-webp',
+        ])
+    : null;
+  const rawImageDialogSrc = pendingImagePreviewUrl ?? watchedImage?.url;
+  const imageDialogSrc = rawImageDialogSrc
+    ? rawImageDialogSrc.startsWith('blob:')
+      ? rawImageDialogSrc
+      : buildImageKitTransformUrl(rawImageDialogSrc, [
+          'w-1600',
+          'q-85',
+          'f-webp',
+        ])
+    : null;
+  const hasImagePreview = Boolean(imagePreviewSrc && imageDialogSrc);
+  const hasSelectedOrExistingImage = Boolean(watchedImage || pendingImageFile);
+  const uploadButtonLabel = isImageUploading
+    ? 'Mengunggah foto...'
+    : pendingImageFile
+      ? 'Ganti foto terpilih'
+      : watchedImage
+        ? 'Ganti foto'
+        : 'Upload foto';
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{isEditMode ? 'Edit Product' : 'Create Product'}</CardTitle>
-      </CardHeader>
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -281,7 +587,11 @@ export function ProductForm({
                   <FormItem className="md:col-span-2">
                     <FormLabel>Nama produk</FormLabel>
                     <FormControl>
-                      <Input placeholder="Contoh: Kaos Basic" {...field} />
+                      <Input
+                        placeholder="Contoh: Kaos Basic Premium"
+                        autoComplete="off"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -294,19 +604,27 @@ export function ProductForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Kategori</FormLabel>
-                    <FormControl>
-                      <select
-                        value={field.value}
-                        onChange={field.onChange}
-                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                      >
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Pilih kategori produk" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
                         {PRODUCT_CATEGORY_OPTIONS.map((value) => (
-                          <option key={value} value={value}>
-                            {CATEGORY_LABELS[value]}
-                          </option>
+                          <SelectItem key={value} value={value}>
+                            {PRODUCT_CATEGORY_LABELS[value]}
+                          </SelectItem>
                         ))}
-                      </select>
-                    </FormControl>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-muted-foreground text-xs">
+                      Untuk saat ini kategori dikunci ke General.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -317,20 +635,21 @@ export function ProductForm({
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <FormControl>
-                      <select
-                        value={field.value}
-                        onChange={field.onChange}
-                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                      >
+                    <FormLabel>Status produk</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Pilih status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
                         {PRODUCT_STATUS_OPTIONS.map((value) => (
-                          <option key={value} value={value}>
-                            {STATUS_LABELS[value]}
-                          </option>
+                          <SelectItem key={value} value={value}>
+                            {PRODUCT_STATUS_LABELS[value]}
+                          </SelectItem>
                         ))}
-                      </select>
-                    </FormControl>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -342,116 +661,139 @@ export function ProductForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Satuan</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Contoh: pcs" {...field} />
-                    </FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Pilih satuan" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {PRODUCT_UNIT_OPTIONS.map((value) => (
+                          <SelectItem key={value} value={value}>
+                            {PRODUCT_UNIT_LABELS[value]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
 
-            <div className="space-y-3 rounded-lg border p-4">
+            <div className="space-y-4 rounded-lg border p-3">
+              <div className="flex flex-col gap-4 md:flex-row">
+                <div className="">
+                  <div className="bg-muted/10 rounded-md border border-dashed p-3">
+                    {hasImagePreview ? (
+                      <ImagePreviewDialog
+                        src={imageDialogSrc!}
+                        thumbnail_src={imagePreviewSrc!}
+                        external_src={rawImageDialogSrc!}
+                        alt={`Foto produk ${watchedName || 'baru'}`}
+                        title={
+                          watchedName ? `Foto ${watchedName}` : 'Foto produk'
+                        }
+                        description="Klik foto untuk melihat ukuran lebih besar."
+                        trigger_class_name="size-16 rounded-md"
+                        trigger_image_class_name="size-16 rounded-md object-cover"
+                      />
+                    ) : (
+                      <div className="bg-background/40 text-muted-foreground flex size-16 items-center justify-center rounded-md border border-dashed">
+                        <ImagePlusIcon className="size-6" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3 md:max-w-xl">
+                  <div>
+                    <p className="text-sm font-medium">Foto produk</p>
+                    <p className="text-muted-foreground text-xs">
+                      Upload 1 foto utama produk. Foto baru dikirim ke ImageKit
+                      saat klik Simpan produk. Format: JPG/PNG/WEBP, maksimal
+                      5MB.
+                    </p>
+                  </div>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageFileChange}
+                    disabled={isPending || isImageUploading}
+                    className="hidden"
+                  />
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isPending || isImageUploading}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="gap-2"
+                    >
+                      {isImageUploading ? <Spinner className="size-4" /> : null}
+                      {uploadButtonLabel}
+                    </Button>
+
+                    {hasSelectedOrExistingImage ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        disabled={isPending || isImageUploading}
+                        onClick={() => {
+                          clearPendingImage();
+                          form.setValue('image', null, {
+                            shouldDirty: true,
+                            shouldTouch: true,
+                          });
+                        }}
+                      >
+                        Hapus foto
+                      </Button>
+                    ) : null}
+                  </div>
+
+                  {isImageUploading ? (
+                    <div className="w-full max-w-xs space-y-1">
+                      <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+                        <div
+                          className="bg-primary h-full transition-all"
+                          style={{ width: `${imageUploadProgress}%` }}
+                        />
+                      </div>
+                      <p className="text-muted-foreground text-xs">
+                        Progress upload: {imageUploadProgress}%
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg">
               <div>
-                <p className="text-sm font-medium">Image produk</p>
+                <p className="text-sm font-medium">Varian (opsional)</p>
                 <p className="text-muted-foreground text-xs">
-                  Satu image utama per produk.
+                  Kami sediakan 1 baris varian. Boleh dibiarkan kosong kalau
+                  produk ini tidak punya varian.
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageFileChange}
-                  disabled={isPending || isImageUploading}
-                  className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-                />
-
-                {watchedImage ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      form.setValue('image', null, {
-                        shouldDirty: true,
-                        shouldTouch: true,
-                      })
-                    }
-                  >
-                    Hapus image
-                  </Button>
-                ) : null}
-              </div>
-
-              {watchedImage ? (
-                <ImageWithSkeleton
-                  src={watchedImage.thumbnail_url ?? watchedImage.url}
-                  alt="Product image"
-                  width={480}
-                  height={480}
-                  className="h-40 w-full max-w-xs rounded-md object-cover"
-                />
-              ) : (
-                <p className="text-muted-foreground text-sm">Belum ada image produk.</p>
-              )}
-            </div>
-
-            <div className="space-y-3 rounded-lg border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">Varian</p>
-                  <p className="text-muted-foreground text-xs">
-                    Nonaktif = produk tanpa varian eksplisit (otomatis dibuat 1
-                    default variant internal).
-                  </p>
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="has_variants"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center gap-2 space-y-0">
-                      <FormLabel className="text-sm">Aktifkan multi varian</FormLabel>
-                      <FormControl>
-                        <input
-                          type="checkbox"
-                          className="accent-primary size-4"
-                          checked={field.value}
-                          onChange={(event) =>
-                            field.onChange(event.currentTarget.checked)
-                          }
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              {hasVariants ? (
-                <div className="space-y-4">
-                  {fields.map((variantField, index) => (
+              <div className="space-y-4">
+                {fields.map((variantField, index) => {
+                  return (
                     <div
                       key={variantField.form_key}
                       className="space-y-3 rounded-md border p-3"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium">Varian {index + 1}</p>
-                        <div className="flex items-center gap-2">
-                          {form.getValues(`variants.${index}.is_default`) ? (
-                            <span className="text-muted-foreground text-xs">
-                              Default
-                            </span>
-                          ) : null}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => markVariantAsDefault(index)}
-                          >
-                            Jadikan default
-                          </Button>
+                        <p className="text-sm font-medium">
+                          Varian {index + 1}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button
                             type="button"
                             size="sm"
@@ -471,7 +813,10 @@ export function ProductForm({
                             <FormItem>
                               <FormLabel>Nama varian</FormLabel>
                               <FormControl>
-                                <Input placeholder="Contoh: Hitam - L" {...field} />
+                                <Input
+                                  placeholder="Contoh: Hitam / L"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -489,13 +834,16 @@ export function ProductForm({
                                   type="number"
                                   min="0"
                                   step="0.01"
+                                  placeholder="0"
                                   value={field.value}
                                   onChange={(event) => {
                                     const parsedPrice = Number(
                                       event.currentTarget.value,
                                     );
                                     field.onChange(
-                                      Number.isFinite(parsedPrice) ? parsedPrice : 0,
+                                      Number.isFinite(parsedPrice)
+                                        ? parsedPrice
+                                        : 0,
                                     );
                                   }}
                                 />
@@ -513,7 +861,7 @@ export function ProductForm({
                               <FormLabel>SKU (opsional)</FormLabel>
                               <FormControl>
                                 <Input
-                                  placeholder="Contoh: SKU-001"
+                                  placeholder="Contoh: SKU-KAOS-001"
                                   value={field.value ?? ''}
                                   onChange={field.onChange}
                                 />
@@ -531,7 +879,7 @@ export function ProductForm({
                               <FormLabel>Barcode (opsional)</FormLabel>
                               <FormControl>
                                 <Input
-                                  placeholder="Contoh: 899..."
+                                  placeholder="Contoh: 899XXXXXXXXXX"
                                   value={field.value ?? ''}
                                   onChange={field.onChange}
                                 />
@@ -542,22 +890,31 @@ export function ProductForm({
                         />
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      append({
-                        ...createEmptyVariant(),
-                        is_default: fields.length === 0,
-                      })
-                    }
-                  >
-                    Tambah varian
-                  </Button>
-                </div>
-              ) : null}
+                {typeof variantsError?.message === 'string' ? (
+                  <p className="text-destructive text-sm">
+                    {variantsError.message}
+                  </p>
+                ) : null}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const hasDefault = form
+                      .getValues('variants')
+                      .some((variant) => variant.is_default);
+
+                    append(
+                      createEmptyProductVariant({ is_default: !hasDefault }),
+                    );
+                  }}
+                >
+                  Tambah varian
+                </Button>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -565,9 +922,9 @@ export function ProductForm({
                 <Button
                   type="submit"
                   isLoading={isPending || isImageUploading}
-                  loadingText="Menyimpan..."
+                  loadingText="Menyimpan produk..."
                 >
-                  {isEditMode ? 'Simpan perubahan' : 'Buat product'}
+                  {isEditMode ? 'Simpan perubahan' : 'Simpan produk'}
                 </Button>
                 <Button variant="outline" asChild>
                   <Link href="/products">Batal</Link>

@@ -6,6 +6,9 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { db } from '@/db';
 import { products, productVariants } from '@/db/schema';
 import {
+  createEmptyProductVariant,
+  inferProductHasVariants,
+  PRODUCT_LOCKED_CATEGORY,
   productImageSchema,
   type ProductFormValuesType,
 } from '@/lib/validation/products';
@@ -16,33 +19,6 @@ import { requireProductsWriteContext } from '../../guards';
 const paramsSchema = z.object({
   product_id: z.string().uuid(),
 });
-
-/**
- * Heuristic for deciding whether form should open in multi-variant mode.
- */
-function inferHasVariants(
-  variants: Array<{
-    is_default: boolean;
-    name: string;
-    selling_price: string;
-    sku: string | null;
-    barcode: string | null;
-  }>,
-): boolean {
-  if (variants.length > 1) return true;
-  if (variants.length === 0) return false;
-
-  const [variant] = variants;
-  if (!variant) return false;
-
-  return (
-    !variant.is_default ||
-    variant.name !== 'Default' ||
-    Number(variant.selling_price) !== 0 ||
-    variant.sku !== null ||
-    variant.barcode !== null
-  );
-}
 
 /** Edit product page. */
 export default async function EditProductPage({
@@ -68,7 +44,6 @@ export default async function EditProductPage({
     .select({
       product_id: products.id,
       name: products.name,
-      category: products.category,
       image: products.image,
       unit: products.unit,
       status: products.status,
@@ -106,15 +81,17 @@ export default async function EditProductPage({
 
   const parsedImage = productImageSchema.nullable().safeParse(product.image ?? null);
 
+  const has_variants = inferProductHasVariants(variants);
+
   const initial_values: ProductFormValuesType = {
     name: product.name,
-    category: product.category,
+    category: PRODUCT_LOCKED_CATEGORY,
     unit: product.unit,
     status: product.status,
     image: parsedImage.success ? parsedImage.data : null,
-    has_variants: inferHasVariants(variants),
-    variants:
-      variants.length > 0
+    has_variants,
+    variants: has_variants
+      ? variants.length > 0
         ? variants.map((variant) => ({
             id: variant.id,
             name: variant.name,
@@ -123,23 +100,16 @@ export default async function EditProductPage({
             barcode: variant.barcode ?? '',
             is_default: variant.is_default,
           }))
-        : [
-            {
-              name: '',
-              selling_price: 0,
-              sku: '',
-              barcode: '',
-              is_default: true,
-            },
-          ],
+        : [createEmptyProductVariant({ is_default: true })]
+      : [createEmptyProductVariant({ is_default: true })],
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Edit Product</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Edit Produk</h1>
         <p className="text-muted-foreground text-sm">
-          Perbarui data produk, image, dan varian.
+          Perbarui informasi produk, foto utama, dan daftar varian.
         </p>
       </div>
 

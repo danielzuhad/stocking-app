@@ -7,6 +7,14 @@ import InputSearch from '@/components/input-search';
 import { Badge } from '@/components/ui/badge';
 import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table';
 import { useDataTableUrlPagination } from '@/hooks/use-data-table-url-pagination/use-data-table-url-pagination';
+import {
+  PRODUCT_CATEGORY_LABELS,
+  PRODUCT_STATUS_LABELS,
+  PRODUCT_UNIT_LABELS,
+  type ProductCategoryType,
+  type ProductStatusType,
+  type ProductUnitType,
+} from '@/lib/products/enums';
 import { formatDateTime } from '@/lib/utils';
 import type { ProductRowType } from '@/types';
 import { ProductRowActions } from './components/product-row-actions';
@@ -23,11 +31,9 @@ function buildColumns(can_write: boolean): Array<ColumnDef<ProductRowType>> {
       ),
       cell: ({ row }) => (
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium">
-            {row.original.name}
-          </div>
+          <div className="truncate text-sm font-medium">{row.original.name}</div>
           <div className="text-muted-foreground truncate text-xs">
-            {row.original.category}
+            {PRODUCT_CATEGORY_LABELS[row.original.category as ProductCategoryType]}
           </div>
         </div>
       ),
@@ -39,7 +45,9 @@ function buildColumns(can_write: boolean): Array<ColumnDef<ProductRowType>> {
         <DataTableColumnHeader column={column} title="Satuan" />
       ),
       cell: ({ getValue }) => (
-        <span className="text-sm">{String(getValue())}</span>
+        <span className="text-sm">
+          {PRODUCT_UNIT_LABELS[getValue() as ProductUnitType]}
+        </span>
       ),
     },
     {
@@ -49,10 +57,10 @@ function buildColumns(can_write: boolean): Array<ColumnDef<ProductRowType>> {
         <DataTableColumnHeader column={column} title="Status" />
       ),
       cell: ({ getValue }) => {
-        const status = String(getValue());
+        const status = getValue() as ProductStatusType;
         return (
           <Badge variant={status === 'ACTIVE' ? 'default' : 'secondary'}>
-            {status}
+            {PRODUCT_STATUS_LABELS[status]}
           </Badge>
         );
       },

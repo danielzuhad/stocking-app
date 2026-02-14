@@ -1,18 +1,27 @@
+import {
+  PRODUCT_CATEGORY_OPTIONS,
+  PRODUCT_DEFAULT_CATEGORY,
+  PRODUCT_DEFAULT_STATUS,
+  PRODUCT_DEFAULT_UNIT,
+  PRODUCT_STATUS_ACTIVE,
+  PRODUCT_STATUS_INACTIVE,
+  PRODUCT_STATUS_OPTIONS,
+  PRODUCT_UNIT_OPTIONS,
+  type ProductCategoryType,
+  type ProductStatusType,
+  type ProductUnitType,
+} from '@/db/schema/product-enums';
+
 /**
- * Shared product enum values used by DB schema, validation, and UI.
- *
- * Keep all product enum values in this module so one change propagates
- * consistently across Drizzle schema + Zod + form components.
+ * Shared product enum values sourced from Drizzle enum declarations.
  */
 export const PRODUCT_ENUM_VALUES = {
-  category: ['FASHION', 'COSMETIC', 'GENERAL'],
-  status: ['ACTIVE', 'INACTIVE'],
-  unit: ['PCS', 'BOTTLE', 'PACK', 'BOX', 'SET', 'OTHER'],
+  category: PRODUCT_CATEGORY_OPTIONS,
+  status: PRODUCT_STATUS_OPTIONS,
+  unit: PRODUCT_UNIT_OPTIONS,
 } as const;
 
-export type ProductCategoryType = (typeof PRODUCT_ENUM_VALUES.category)[number];
-export type ProductStatusType = (typeof PRODUCT_ENUM_VALUES.status)[number];
-export type ProductUnitType = (typeof PRODUCT_ENUM_VALUES.unit)[number];
+export type { ProductCategoryType, ProductStatusType, ProductUnitType };
 
 /** User-friendly labels for product category enum values. */
 export const PRODUCT_CATEGORY_LABELS: Record<ProductCategoryType, string> = {
@@ -37,9 +46,13 @@ export const PRODUCT_UNIT_LABELS: Record<ProductUnitType, string> = {
   OTHER: 'Lainnya',
 };
 
-/** Locked category for current MVP phase. */
-export const PRODUCT_DEFAULT_CATEGORY: ProductCategoryType = 'GENERAL';
-/** Default unit used when creating new products. */
-export const PRODUCT_DEFAULT_UNIT: ProductUnitType = 'PCS';
-/** Default product status for new records. */
-export const PRODUCT_DEFAULT_STATUS: ProductStatusType = 'ACTIVE';
+export {
+  PRODUCT_CATEGORY_OPTIONS,
+  PRODUCT_DEFAULT_CATEGORY,
+  PRODUCT_DEFAULT_STATUS,
+  PRODUCT_DEFAULT_UNIT,
+  PRODUCT_STATUS_ACTIVE,
+  PRODUCT_STATUS_INACTIVE,
+  PRODUCT_STATUS_OPTIONS,
+  PRODUCT_UNIT_OPTIONS,
+};

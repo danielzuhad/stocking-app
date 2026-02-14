@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SYSTEM_ROLE_STAFF } from '@/lib/auth/enums';
 import { requireAuthSession } from '@/lib/auth/guards';
 import {
   getDataTableQueryFromSearchParams,
@@ -22,7 +23,7 @@ export default async function ProductsPage({
 }) {
   const sessionResult = await requireAuthSession();
   const can_write =
-    sessionResult.ok && sessionResult.data.user.system_role !== 'STAFF';
+    sessionResult.ok && sessionResult.data.user.system_role !== SYSTEM_ROLE_STAFF;
 
   const resolvedSearchParams = await Promise.resolve(searchParams);
   const query = getDataTableQueryFromSearchParams(

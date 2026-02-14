@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { SQL, SQLWrapper } from 'drizzle-orm';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import type { Session } from 'next-auth';
 import { z } from 'zod';
 
@@ -71,7 +71,44 @@ const PRODUCTS_ROW_SELECT = {
   unit: products.unit,
   status: products.status,
   variant_count: sql<number>`count(${productVariants.id})`,
+  variant_names: sql<string[]>`(
+    select coalesce(
+      array_agg(variant_preview.name order by variant_preview.created_at),
+      '{}'::text[]
+    )
+    from (
+      select name, created_at
+      from product_variants as variant_preview
+      where variant_preview.company_id = ${products.company_id}
+        and variant_preview.product_id = ${products.id}
+        and variant_preview.deleted_at is null
+      order by variant_preview.created_at
+      limit 2
+    ) as variant_preview
+  )`,
 } as const;
+
+/**
+ * Variant-level search fragment (`name` / `sku` / `barcode`) via `EXISTS`.
+ */
+function buildProductsVariantSearchWhere(query: string | undefined): SQL | undefined {
+  const normalizedQuery = query?.trim();
+  if (!normalizedQuery) return undefined;
+
+  const searchValue = `%${normalizedQuery}%`;
+  return sql`exists (
+    select 1
+    from product_variants as variant_search
+    where variant_search.company_id = ${products.company_id}
+      and variant_search.product_id = ${products.id}
+      and variant_search.deleted_at is null
+      and (
+        variant_search.name ilike ${searchValue}
+        or coalesce(variant_search.sku, '') ilike ${searchValue}
+        or coalesce(variant_search.barcode, '') ilike ${searchValue}
+      )
+  )`;
+}
 
 /**
  * Shared joined query used by rows query.
@@ -138,6 +175,9 @@ function serializeProductRow(row: ProductDbRowType): ProductRowType {
     created_at: row.created_at.toISOString(),
     updated_at: row.updated_at.toISOString(),
     variant_count: Number(row.variant_count ?? 0),
+    variant_names: Array.isArray(row.variant_names)
+      ? row.variant_names.filter((name): name is string => typeof name === 'string')
+      : [],
   };
 }
 
@@ -169,7 +209,13 @@ export async function fetchProductsTable(
           eq(products.company_id, ctx.company_id),
           isNull(products.deleted_at),
         );
-        const searchWhere = productsSearch.buildWhere(query.q, searchFields);
+        const productSearchWhere = productsSearch.buildWhere(query.q, searchFields);
+        const variantSearchWhere = buildProductsVariantSearchWhere(query.q);
+        const searchWhere =
+          productSearchWhere && variantSearchWhere
+            ? or(productSearchWhere, variantSearchWhere)
+            : (productSearchWhere ?? variantSearchWhere);
+
         return searchWhere ? and(companyWhere, searchWhere) : companyWhere;
       },
       buildOrderBy: () => DEFAULT_ORDER_BY,

@@ -5,10 +5,13 @@ import * as React from 'react';
 
 import InputSearch from '@/components/input-search';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table';
+import { DeleteButton } from '@/components/ui/delete-button';
 import { useDataTableUrlPagination } from '@/hooks/use-data-table-url-pagination/use-data-table-url-pagination';
 import {
   PRODUCT_CATEGORY_LABELS,
+  PRODUCT_STATUS_ACTIVE,
   PRODUCT_STATUS_LABELS,
   PRODUCT_UNIT_LABELS,
   type ProductCategoryType,
@@ -17,11 +20,16 @@ import {
 } from '@/lib/products/enums';
 import { formatDateTime } from '@/lib/utils';
 import type { ProductRowType } from '@/types';
-import { ProductRowActions } from './components/product-row-actions';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { deleteProductAction } from './actions';
 
 const URL_STATE_KEY = 'dt_products';
 
-function buildColumns(can_write: boolean): Array<ColumnDef<ProductRowType>> {
+function buildColumns(
+  can_write: boolean,
+  onDeleteSuccess: () => void,
+): Array<ColumnDef<ProductRowType>> {
   const baseColumns: Array<ColumnDef<ProductRowType>> = [
     {
       accessorKey: 'name',
@@ -31,9 +39,15 @@ function buildColumns(can_write: boolean): Array<ColumnDef<ProductRowType>> {
       ),
       cell: ({ row }) => (
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{row.original.name}</div>
           <div className="text-muted-foreground truncate text-xs">
-            {PRODUCT_CATEGORY_LABELS[row.original.category as ProductCategoryType]}
+            {
+              PRODUCT_CATEGORY_LABELS[
+                row.original.category as ProductCategoryType
+              ]
+            }
+          </div>
+          <div className="truncate text-sm font-medium">
+            {row.original.name}
           </div>
         </div>
       ),
@@ -59,7 +73,9 @@ function buildColumns(can_write: boolean): Array<ColumnDef<ProductRowType>> {
       cell: ({ getValue }) => {
         const status = getValue() as ProductStatusType;
         return (
-          <Badge variant={status === 'ACTIVE' ? 'default' : 'secondary'}>
+          <Badge
+            variant={status === PRODUCT_STATUS_ACTIVE ? 'default' : 'secondary'}
+          >
             {PRODUCT_STATUS_LABELS[status]}
           </Badge>
         );
@@ -71,8 +87,35 @@ function buildColumns(can_write: boolean): Array<ColumnDef<ProductRowType>> {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Varian" />
       ),
-      cell: ({ getValue }) => (
-        <span className="text-sm font-medium">{Number(getValue() ?? 0)}</span>
+      cell: ({ row }) => {
+        const variantCount = Number(row.original.variant_count ?? 0);
+        const variantNames = row.original.variant_names;
+        const visibleVariantNames = variantNames.slice(0, 2);
+        const hiddenVariantCount = Math.max(0, variantNames.length - 2);
+
+        return (
+          <div className="min-w-0">
+            <div className="text-sm font-medium">{variantCount}</div>
+            {visibleVariantNames.length > 0 ? (
+              <div className="text-muted-foreground truncate text-xs">
+                {visibleVariantNames.join(', ')}
+                {hiddenVariantCount > 0 ? ` +${hiddenVariantCount} lagi` : ''}
+              </div>
+            ) : null}
+          </div>
+        );
+      },
+    },
+    {
+      id: 'stock',
+      meta: { label: 'Stok' },
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Stok" />
+      ),
+      cell: () => (
+        <span className="text-muted-foreground text-xs">
+          Belum tersedia
+        </span>
       ),
     },
     {
@@ -100,10 +143,24 @@ function buildColumns(can_write: boolean): Array<ColumnDef<ProductRowType>> {
       enableHiding: false,
       header: 'Aksi',
       cell: ({ row }) => (
-        <ProductRowActions
-          product_id={row.original.id}
-          product_name={row.original.name}
-        />
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/products/${row.original.id}/edit`}>Edit</Link>
+          </Button>
+          <DeleteButton
+            action={() => deleteProductAction({ product_id: row.original.id })}
+            title="Hapus produk ini?"
+            description={
+              <>
+                Produk <strong>{row.original.name}</strong> akan dihapus
+                permanen bersama varian terkait.
+              </>
+            }
+            trigger_label="Hapus"
+            success_toast_message="Produk berhasil dihapus."
+            on_success={onDeleteSuccess}
+          />
+        </div>
       ),
     },
   ];
@@ -125,6 +182,7 @@ export function ProductsTable({
   initialPageSize: number;
   can_write: boolean;
 }) {
+  const router = useRouter();
   const { pagination, onPaginationChange, isPending } =
     useDataTableUrlPagination({
       urlStateKey: URL_STATE_KEY,
@@ -133,7 +191,13 @@ export function ProductsTable({
     });
   const [searchPending, setSearchPending] = React.useState(false);
   const isLoading = isPending || searchPending;
-  const columns = React.useMemo(() => buildColumns(can_write), [can_write]);
+  const columns = React.useMemo(
+    () =>
+      buildColumns(can_write, () => {
+        router.refresh();
+      }),
+    [can_write, router],
+  );
 
   return (
     <DataTable
@@ -141,7 +205,7 @@ export function ProductsTable({
       data={data}
       toolbarActions={
         <InputSearch
-          placeholder="Cari nama / kategori "
+          placeholder="Cari nama / kategori / SKU / barcode"
           onPendingChange={setSearchPending}
           urlStateKey={URL_STATE_KEY}
         />

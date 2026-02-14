@@ -8,6 +8,7 @@ import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { SYSTEM_ROLE_SUPERADMIN } from '@/lib/auth/enums';
 import { getErrorPresentation } from '@/lib/errors/presentation';
 
 /**
@@ -27,7 +28,7 @@ export default function GlobalError({
   const { data: session } = useSession();
   const [isPending, startTransition] = React.useTransition();
 
-  const isSuperadmin = session?.user.system_role === 'SUPERADMIN';
+  const isSuperadmin = session?.user.system_role === SYSTEM_ROLE_SUPERADMIN;
   const showDeveloperDetails =
     isSuperadmin || process.env.NODE_ENV !== 'production';
 

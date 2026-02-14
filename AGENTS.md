@@ -163,6 +163,11 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
 
 - Simpan schema di folder yang jelas (mis. `db/schema/*`) dan gunakan migrations (drizzle-kit) untuk perubahan schema.
 - Naming DB: gunakan **snake_case** untuk nama table/column/enum/index **dan** key properti di definisi schema Drizzle (contoh: `company_id`, `created_at`, `password_hash`).
+- **Single source of truth untuk enum wajib di Drizzle schema**:
+  - Deklarasikan nilai enum hanya di `db/schema/*-enums.ts` menggunakan `pgEnum(...)`.
+  - Turunkan `options`/`type`/`constant` dari deklarasi enum Drizzle (`enumValues`), jangan menulis ulang daftar nilai yang sama di tempat lain.
+  - Jika butuh dipakai lintas layer (auth/validation/UI), gunakan modul shared (mis. `lib/<domain>/enums.ts`) yang **mere-export** dari schema Drizzle, bukan membuat daftar manual baru.
+  - Semua perbandingan role/status/category di app/guard/action harus memakai constant yang diturunkan dari enum source yang sama (hindari magic string tersebar).
 - Untuk production, database berjalan di **VPS yang sama** dengan app (single VPS setup). Konsekuensinya: backup, security, dan monitoring menjadi tanggung jawab kita.
 - Semua operasi yang memengaruhi stok/transaksi harus **transactional** (gunakan transaksi Postgres).
 - Index yang wajib dipertimbangkan:
@@ -222,6 +227,7 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
   - Definisikan tipe domain/DTO yang jelas; jangan bocorkan bentuk row DB mentah ke UI tanpa mapping yang disengaja.
   - Hindari `any`; prefer tipe eksplisit untuk boundary (server action input/output).
   - Untuk tipe yang bersumber dari DB, **derive dari Drizzle schema** (`$inferSelect` / `$inferInsert`) lalu compose via `Pick/Omit` (hindari menulis ulang `string | null | ...` manual).
+  - Untuk enum domain (role/status/category/unit/dll), **jangan tulis union string manual** di app/lib/types (`'A' | 'B' | ...`); derive dari enum Drizzle lalu reuse.
   - Standarisasi naming tipe (wajib konsisten):
     - Untuk exported domain types/interfaces yang dishare lintas fitur (terutama di `types/*`), gunakan suffix **`Type`**: contoh `CompanyType`, `CompanyInsertType`, `SystemLogRowType`.
     - Jangan gunakan prefix `I` / `T` untuk concrete domain type (hindari `ICompany`, `TCompany`).
@@ -390,18 +396,29 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
 ## Testing (Jest)
 
 - Runner: Jest + React Testing Library.
+- Kebijakan wajib:
+  - Setiap feature/service yang ditambah atau diubah **wajib** punya unit-test/component-test yang relevan di change set yang sama.
+  - Jangan merge perubahan feature/service tanpa test, kecuali ada alasan teknis kuat yang didokumentasikan jelas di PR/commit note.
+  - Prinsip utama: **test case mengikuti use-case/aturan bisnis**, lalu implementasi function/komponen mengikuti test tersebut (bukan sebaliknya).
 - Konvensi:
   - simpan test secara **colocated** di folder fitur/komponen terkait (contoh: `components/input-search/input-search.test.tsx`)
+  - untuk feature route/service, taruh test di area fitur yang sama:
+    - `app/(dashboard)/products/components/product-form.tsx` → `app/(dashboard)/products/components/product-form.test.tsx`
+    - `app/(dashboard)/products/actions.ts` → `app/(dashboard)/products/actions.test.ts` (jika unit-test murni logic), atau ekstrak logic ke modul domain agar mudah di-test
   - untuk shared hook/komponen, gunakan pola folderized module:
     - `hooks/<feature>/<feature>.ts`
     - `hooks/<feature>/<feature>.test.ts`
     - (opsional) `hooks/<feature>/index.ts` untuk re-export API public
   - gunakan nama file `*.test.ts(x)`; hindari folder `__tests__/` kecuali untuk test lintas fitur yang memang butuh centralization
-  - fokus ke perilaku (render, interaksi, edge case), bukan implementasi internal
+  - fokus ke perilaku (render, interaksi, edge case, business rule), bukan implementasi internal
+  - hindari test yang mengunci detail internal rapuh (nama function private, struktur state internal, className non-kontraktual, urutan efek yang incidental)
 - Prioritas test:
   - pure function (pricing/diskon, perhitungan diff opname, validasi rule) → unit test
   - komponen UI penting (form submit, table state, error state) → component test (jsdom)
   - logic yang menyentuh DB sebaiknya dipisah ke layer domain agar bisa di-test tanpa render UI
+- Desain untuk testability:
+  - jika function/komponen sulit diuji secara behavior-first, refactor boundary (pisah pure logic, kurangi side-effect tersembunyi, perjelas input/output) alih-alih menurunkan kualitas test.
+  - gunakan mock seperlunya untuk dependency eksternal (router, network, auth), tapi assertion tetap pada outcome fitur yang dilihat user/caller.
 - Jalankan:
   - `bun run test` (sekali)
   - `bun run test:watch` (dev)
@@ -428,3 +445,4 @@ Dokumen ini adalah pedoman teknikal untuk pengembangan **Stocking App** (multi-t
 - Jangan menyimpan secret/credential di client atau repo.
 - Jangan mengubah stok “langsung” tanpa mencatat `stock_movements`.
 - Jangan hard delete ledger/transaksi penting; gunakan status `VOID/CANCELLED` atau dokumen pembalik agar audit trail tetap utuh.
+- Jangan mendeklarasi ulang daftar nilai enum atau union string enum di luar source schema Drizzle (kecuali migration SQL).

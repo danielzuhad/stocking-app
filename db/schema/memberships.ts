@@ -1,14 +1,13 @@
-import { index, pgEnum, pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+
+import {
+  MEMBERSHIP_STATUS_ACTIVE,
+  membershipRoleEnum,
+  membershipStatusEnum,
+} from './auth-enums';
 
 import { companies } from './companies';
 import { users } from './users';
-
-export const membershipRoleEnum = pgEnum('membership_role', ['ADMIN', 'STAFF']);
-
-export const membershipStatusEnum = pgEnum('membership_status', [
-  'ACTIVE',
-  'INACTIVE',
-]);
 
 export const memberships = pgTable(
   'memberships',
@@ -21,7 +20,7 @@ export const memberships = pgTable(
       .references(() => companies.id)
       .notNull(),
     role: membershipRoleEnum('role').notNull(),
-    status: membershipStatusEnum('status').default('ACTIVE').notNull(),
+    status: membershipStatusEnum('status').default(MEMBERSHIP_STATUS_ACTIVE).notNull(),
     created_at: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

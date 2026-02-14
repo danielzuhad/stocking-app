@@ -10,7 +10,7 @@ import { err, getHttpStatusByActionErrorCode, ok } from '@/lib/actions/result';
 import {
   requireNonStaffActiveCompanyScope,
 } from '@/lib/auth/guards';
-import { toSafeSlugSegment } from '@/lib/utils';
+import { buildCompanyAssetFolderSegment } from '@/lib/utils';
 
 /**
  * Returns ImageKit upload authentication for client direct upload.
@@ -57,13 +57,10 @@ export async function POST() {
     .where(eq(companies.id, scopeResult.data.company_id))
     .limit(1);
 
-  const companyFolderFromName = company?.name
-    ? toSafeSlugSegment(company.name)
-    : '';
-  const companyFolder =
-    companyFolderFromName.length > 0
-      ? companyFolderFromName
-      : scopeResult.data.company_id;
+  const companyFolder = buildCompanyAssetFolderSegment(
+    company?.name,
+    scopeResult.data.company_id,
+  );
 
   const response = ok({
     token,

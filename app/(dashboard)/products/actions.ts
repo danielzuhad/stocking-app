@@ -1,15 +1,22 @@
 'use server';
 
-import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
+import { Buffer } from 'node:buffer';
+
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db';
-import { products, productVariants } from '@/db/schema';
+import { companies, products, productVariants } from '@/db/schema';
 import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
 import { logActivity } from '@/lib/audit';
+import { env } from '@/env';
 import { getErrorPresentation } from '@/lib/errors/presentation';
 import { PRODUCT_DEFAULT_CATEGORY } from '@/lib/products/enums';
-import { toFixedScaleNumberText, toNullableTrimmedText } from '@/lib/utils';
+import {
+  buildCompanyAssetFolderSegment,
+  toFixedScaleNumberText,
+  toNullableTrimmedText,
+} from '@/lib/utils';
 import {
   createProductSchema,
   deleteProductSchema,
@@ -119,47 +126,249 @@ function mapKnownMutationError(error: unknown): ActionResult<never> | null {
 }
 
 /**
+ * Detects PostgreSQL FK constraint violation.
+ */
+function isForeignKeyConstraintError(error: unknown): boolean {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === '23503'
+  ) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes('violates foreign key constraint');
+}
+
+/**
+ * Builds ImageKit basic auth header from private key.
+ */
+function buildImageKitAuthHeader(privateKey: string): string {
+  return `Basic ${Buffer.from(`${privateKey}:`).toString('base64')}`;
+}
+
+/**
+ * Resolves company folder segment used for ImageKit ownership checks.
+ */
+async function resolveCompanyImageFolder(companyId: string): Promise<string> {
+  const [company] = await db
+    .select({ name: companies.name })
+    .from(companies)
+    .where(eq(companies.id, companyId))
+    .limit(1);
+
+  return buildCompanyAssetFolderSegment(company?.name, companyId);
+}
+
+type ImageKitFileDetailsType = {
+  filePath?: string;
+};
+
+/**
+ * Reads ImageKit file details (`/files/:id/details`) with server private key.
+ */
+async function getImageKitFileDetailsById(
+  fileId: string,
+): Promise<ImageKitFileDetailsType | null> {
+  if (!env.IMAGEKIT_PRIVATE_KEY) return null;
+
+  const response = await fetch(
+    `https://api.imagekit.io/v1/files/${encodeURIComponent(fileId)}/details`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: buildImageKitAuthHeader(env.IMAGEKIT_PRIVATE_KEY),
+      },
+    },
+  );
+
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`ImageKit details failed with status ${response.status}`);
+  }
+
+  return (await response.json()) as ImageKitFileDetailsType;
+}
+
+/**
+ * Extracts ImageKit `file_id` from JSON image payload.
+ */
+function getImageFileId(image: unknown): string | null {
+  if (!image || typeof image !== 'object') return null;
+  const fileId = (image as { file_id?: unknown }).file_id;
+  if (typeof fileId !== 'string' || fileId.trim().length === 0) return null;
+  return fileId;
+}
+
+/**
+ * Deletes image file from ImageKit storage by `file_id`.
+ *
+ * This is best-effort cleanup; DB mutations should stay successful even if
+ * external storage cleanup fails.
+ */
+async function deleteImageKitFileById(
+  fileId: string,
+  company_folder: string,
+): Promise<void> {
+  if (!env.IMAGEKIT_PRIVATE_KEY) return;
+
+  const details = await getImageKitFileDetailsById(fileId);
+  if (!details?.filePath) return;
+
+  if (!details.filePath.startsWith(`/products/${company_folder}/`)) {
+    throw new Error('ImageKit file is outside current company folder.');
+  }
+
+  const response = await fetch(
+    `https://api.imagekit.io/v1/files/${encodeURIComponent(fileId)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: buildImageKitAuthHeader(env.IMAGEKIT_PRIVATE_KEY),
+      },
+    },
+  );
+
+  if (response.status === 404) return;
+  if (response.ok) return;
+
+  throw new Error(`ImageKit delete failed with status ${response.status}`);
+}
+
+/**
+ * Validates that uploaded image file belongs to active company folder.
+ */
+async function ensureProductImageOwnership(input: {
+  file_id: string;
+  company_folder: string;
+}): Promise<ActionResult<{ ok: true }>> {
+  if (!env.IMAGEKIT_PRIVATE_KEY) {
+    return err('INTERNAL', 'Konfigurasi image upload belum lengkap di server.');
+  }
+
+  try {
+    const details = await getImageKitFileDetailsById(input.file_id);
+    if (!details?.filePath) {
+      return err('INVALID_INPUT', 'Foto produk tidak ditemukan di storage.');
+    }
+
+    if (!details.filePath.startsWith(`/products/${input.company_folder}/`)) {
+      return err(
+        'FORBIDDEN',
+        'Foto produk tidak valid untuk company yang sedang aktif.',
+      );
+    }
+  } catch (error) {
+    const presentation = getErrorPresentation({ error });
+    console.error('IMAGEKIT_VALIDATE_OWNERSHIP_ERROR', presentation.developer);
+    return err('INTERNAL', 'Gagal memverifikasi foto produk di storage.');
+  }
+
+  return ok({ ok: true });
+}
+
+/**
  * Ensures SKU and barcode are unique per company (excluding soft-deleted variants).
  */
 async function ensureVariantCodeUniqueness(input: {
   company_id: string;
   variants: NormalizedVariantInputType[];
 }): Promise<ActionResult<{ ok: true }>> {
+  const requestedSkus: Array<{
+    value: string;
+    variant_id: string | undefined;
+  }> = [];
   for (const variant of input.variants) {
-    if (variant.sku) {
-      const [existingSku] = await db
-        .select({ id: productVariants.id })
-        .from(productVariants)
-        .where(
-          and(
-            eq(productVariants.company_id, input.company_id),
-            eq(productVariants.sku, variant.sku),
-            isNull(productVariants.deleted_at),
-            variant.id ? ne(productVariants.id, variant.id) : undefined,
-          ),
-        )
-        .limit(1);
+    if (!variant.sku) continue;
+    requestedSkus.push({
+      value: variant.sku,
+      variant_id: variant.id,
+    });
+  }
 
-      if (existingSku) {
+  if (requestedSkus.length > 0) {
+    const uniqueSkuValues = Array.from(new Set(requestedSkus.map((v) => v.value)));
+    const allowedIdsBySku = new Map<string, Set<string>>();
+
+    requestedSkus.forEach(({ value, variant_id }) => {
+      if (!allowedIdsBySku.has(value)) {
+        allowedIdsBySku.set(value, new Set<string>());
+      }
+      if (variant_id) {
+        allowedIdsBySku.get(value)?.add(variant_id);
+      }
+    });
+
+    const existingSkus = await db
+      .select({
+        id: productVariants.id,
+        sku: productVariants.sku,
+      })
+      .from(productVariants)
+      .where(
+        and(
+          eq(productVariants.company_id, input.company_id),
+          isNull(productVariants.deleted_at),
+          inArray(productVariants.sku, uniqueSkuValues),
+        ),
+      );
+
+    for (const existingSku of existingSkus) {
+      if (!existingSku.sku) continue;
+      const allowedIds = allowedIdsBySku.get(existingSku.sku);
+      if (!allowedIds?.has(existingSku.id)) {
         return err('CONFLICT', 'SKU varian sudah dipakai product lain.');
       }
     }
+  }
 
-    if (variant.barcode) {
-      const [existingBarcode] = await db
-        .select({ id: productVariants.id })
-        .from(productVariants)
-        .where(
-          and(
-            eq(productVariants.company_id, input.company_id),
-            eq(productVariants.barcode, variant.barcode),
-            isNull(productVariants.deleted_at),
-            variant.id ? ne(productVariants.id, variant.id) : undefined,
-          ),
-        )
-        .limit(1);
+  const requestedBarcodes: Array<{
+    value: string;
+    variant_id: string | undefined;
+  }> = [];
+  for (const variant of input.variants) {
+    if (!variant.barcode) continue;
+    requestedBarcodes.push({
+      value: variant.barcode,
+      variant_id: variant.id,
+    });
+  }
 
-      if (existingBarcode) {
+  if (requestedBarcodes.length > 0) {
+    const uniqueBarcodeValues = Array.from(
+      new Set(requestedBarcodes.map((v) => v.value)),
+    );
+    const allowedIdsByBarcode = new Map<string, Set<string>>();
+
+    requestedBarcodes.forEach(({ value, variant_id }) => {
+      if (!allowedIdsByBarcode.has(value)) {
+        allowedIdsByBarcode.set(value, new Set<string>());
+      }
+      if (variant_id) {
+        allowedIdsByBarcode.get(value)?.add(variant_id);
+      }
+    });
+
+    const existingBarcodes = await db
+      .select({
+        id: productVariants.id,
+        barcode: productVariants.barcode,
+      })
+      .from(productVariants)
+      .where(
+        and(
+          eq(productVariants.company_id, input.company_id),
+          isNull(productVariants.deleted_at),
+          inArray(productVariants.barcode, uniqueBarcodeValues),
+        ),
+      );
+
+    for (const existingBarcode of existingBarcodes) {
+      if (!existingBarcode.barcode) continue;
+      const allowedIds = allowedIdsByBarcode.get(existingBarcode.barcode);
+      if (!allowedIds?.has(existingBarcode.id)) {
         return err('CONFLICT', 'Barcode varian sudah dipakai product lain.');
       }
     }
@@ -180,6 +389,16 @@ export async function createProductAction(
 
   const parsed = createProductSchema.safeParse(input);
   if (!parsed.success) return errFromZod(parsed.error);
+
+  const uploadedImageFileId = getImageFileId(parsed.data.image);
+  if (uploadedImageFileId) {
+    const companyFolder = await resolveCompanyImageFolder(company_id);
+    const ownershipResult = await ensureProductImageOwnership({
+      file_id: uploadedImageFileId,
+      company_folder: companyFolder,
+    });
+    if (!ownershipResult.ok) return ownershipResult;
+  }
 
   const variants = normalizeVariantsInput(parsed.data);
   const noDuplicateResult = ensureNoDuplicateVariantCodesInPayload(variants);
@@ -265,7 +484,10 @@ export async function updateProductAction(
   if (!parsed.success) return errFromZod(parsed.error);
 
   const [existingProduct] = await db
-    .select({ id: products.id })
+    .select({
+      id: products.id,
+      image: products.image,
+    })
     .from(products)
     .where(
       and(
@@ -276,6 +498,18 @@ export async function updateProductAction(
     )
     .limit(1);
   if (!existingProduct) return err('NOT_FOUND', 'Produk tidak ditemukan.');
+  const previousImageFileId = getImageFileId(existingProduct.image);
+  const nextImageFileId = getImageFileId(parsed.data.image);
+  let companyFolder: string | null = null;
+
+  if (nextImageFileId) {
+    companyFolder = await resolveCompanyImageFolder(company_id);
+    const ownershipResult = await ensureProductImageOwnership({
+      file_id: nextImageFileId,
+      company_folder: companyFolder,
+    });
+    if (!ownershipResult.ok) return ownershipResult;
+  }
 
   const existingVariants = await db
     .select({
@@ -349,8 +583,6 @@ export async function updateProductAction(
               selling_price: toFixedScaleNumberText(variant.selling_price),
               is_default: variant.is_default,
               updated_at: now,
-              deleted_at: null,
-              deleted_by: null,
             })
             .where(
               and(
@@ -387,18 +619,12 @@ export async function updateProductAction(
 
       if (variantsToDelete.length > 0) {
         await tx
-          .update(productVariants)
-          .set({
-            deleted_at: now,
-            deleted_by: session.user.id,
-            updated_at: now,
-          })
+          .delete(productVariants)
           .where(
             and(
               eq(productVariants.company_id, company_id),
               eq(productVariants.product_id, parsed.data.product_id),
               inArray(productVariants.id, variantsToDelete),
-              isNull(productVariants.deleted_at),
             ),
           );
       }
@@ -417,10 +643,28 @@ export async function updateProductAction(
       });
     });
 
+    if (previousImageFileId && previousImageFileId !== nextImageFileId) {
+      try {
+        if (!companyFolder) {
+          companyFolder = await resolveCompanyImageFolder(company_id);
+        }
+        await deleteImageKitFileById(previousImageFileId, companyFolder);
+      } catch (error) {
+        console.error('IMAGEKIT_DELETE_OLD_PRODUCT_IMAGE_ERROR', error);
+      }
+    }
+
     revalidatePath(PRODUCTS_PATH);
     revalidatePath(`/products/${parsed.data.product_id}/edit`);
     return ok({ product_id: parsed.data.product_id });
   } catch (error) {
+    if (isForeignKeyConstraintError(error)) {
+      return err(
+        'CONFLICT',
+        'Ada varian yang sudah dipakai transaksi dan tidak bisa dihapus.',
+      );
+    }
+
     const mapped = mapKnownMutationError(error);
     if (mapped) return mapped;
 
@@ -431,7 +675,7 @@ export async function updateProductAction(
 }
 
 /**
- * Soft-deletes a product and all variants transactionally.
+ * Hard-deletes a product and all variants transactionally.
  */
 export async function deleteProductAction(
   input: unknown,
@@ -444,7 +688,10 @@ export async function deleteProductAction(
   if (!parsed.success) return errFromZod(parsed.error);
 
   const [existingProduct] = await db
-    .select({ id: products.id })
+    .select({
+      id: products.id,
+      image: products.image,
+    })
     .from(products)
     .where(
       and(
@@ -456,38 +703,26 @@ export async function deleteProductAction(
     .limit(1);
 
   if (!existingProduct) return err('NOT_FOUND', 'Produk tidak ditemukan.');
+  const imageFileId = getImageFileId(existingProduct.image);
+  const companyFolder = await resolveCompanyImageFolder(company_id);
 
   try {
     await db.transaction(async (tx) => {
-      const now = new Date();
-
       await tx
-        .update(productVariants)
-        .set({
-          deleted_at: now,
-          deleted_by: session.user.id,
-          updated_at: now,
-        })
+        .delete(productVariants)
         .where(
           and(
             eq(productVariants.product_id, parsed.data.product_id),
             eq(productVariants.company_id, company_id),
-            isNull(productVariants.deleted_at),
           ),
         );
 
       await tx
-        .update(products)
-        .set({
-          deleted_at: now,
-          deleted_by: session.user.id,
-          updated_at: now,
-        })
+        .delete(products)
         .where(
           and(
             eq(products.id, parsed.data.product_id),
             eq(products.company_id, company_id),
-            isNull(products.deleted_at),
           ),
         );
 
@@ -497,13 +732,32 @@ export async function deleteProductAction(
         action: 'products.delete',
         target_type: 'product',
         target_id: parsed.data.product_id,
+        meta: {
+          hard_deleted: true,
+          had_image: Boolean(imageFileId),
+        },
       });
     });
+
+    if (imageFileId) {
+      try {
+        await deleteImageKitFileById(imageFileId, companyFolder);
+      } catch (error) {
+        console.error('IMAGEKIT_DELETE_PRODUCT_IMAGE_ERROR', error);
+      }
+    }
 
     revalidatePath(PRODUCTS_PATH);
     revalidatePath(`/products/${parsed.data.product_id}/edit`);
     return ok({ product_id: parsed.data.product_id });
   } catch (error) {
+    if (isForeignKeyConstraintError(error)) {
+      return err(
+        'CONFLICT',
+        'Produk tidak bisa dihapus karena sudah dipakai transaksi.',
+      );
+    }
+
     const presentation = getErrorPresentation({ error });
     console.error('PRODUCTS_DELETE_ERROR', presentation.developer);
     return err('INTERNAL', 'Sedang ada gangguan sistem. Coba lagi beberapa saat.');

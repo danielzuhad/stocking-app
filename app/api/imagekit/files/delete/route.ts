@@ -12,7 +12,7 @@ import {
   requireNonStaffActiveCompanyScope,
 } from '@/lib/auth/guards';
 import { getErrorPresentation } from '@/lib/errors/presentation';
-import { toSafeSlugSegment } from '@/lib/utils';
+import { buildCompanyAssetFolderSegment } from '@/lib/utils';
 
 const deleteUploadedImageSchema = z.object({
   file_id: z.string().trim().min(1).max(255),
@@ -81,13 +81,10 @@ export async function POST(request: Request) {
       .where(eq(companies.id, scopeResult.data.company_id))
       .limit(1);
 
-    const companyFolderFromName = company?.name
-      ? toSafeSlugSegment(company.name)
-      : '';
-    const companyFolder =
-      companyFolderFromName.length > 0
-        ? companyFolderFromName
-        : scopeResult.data.company_id;
+    const companyFolder = buildCompanyAssetFolderSegment(
+      company?.name,
+      scopeResult.data.company_id,
+    );
 
     const imageKitAuthHeader = buildImageKitAuthHeader(env.IMAGEKIT_PRIVATE_KEY);
 

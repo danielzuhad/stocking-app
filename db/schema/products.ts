@@ -1,7 +1,6 @@
 import {
   index,
   jsonb,
-  pgEnum,
   pgTable,
   timestamp,
   text,
@@ -12,8 +11,10 @@ import {
   PRODUCT_DEFAULT_CATEGORY,
   PRODUCT_DEFAULT_STATUS,
   PRODUCT_DEFAULT_UNIT,
-  PRODUCT_ENUM_VALUES,
-} from '@/lib/products/enums';
+  productCategoryEnum,
+  productStatusEnum,
+  productUnitEnum,
+} from './product-enums';
 
 import { companies } from './companies';
 import { users } from './users';
@@ -25,16 +26,6 @@ type ProductImageMetaType = {
   width?: number;
   height?: number;
 };
-
-export const productStatusEnum = pgEnum(
-  'product_status',
-  PRODUCT_ENUM_VALUES.status,
-);
-export const productCategoryEnum = pgEnum(
-  'product_category',
-  PRODUCT_ENUM_VALUES.category,
-);
-export const productUnitEnum = pgEnum('product_unit', PRODUCT_ENUM_VALUES.unit);
 
 export const products = pgTable(
   'products',

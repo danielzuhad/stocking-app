@@ -5,6 +5,10 @@ import type { Session } from 'next-auth';
 
 import { authOptions } from '@/auth';
 import { err, ok, type ActionResult } from '@/lib/actions/result';
+import {
+  SYSTEM_ROLE_STAFF,
+  SYSTEM_ROLE_SUPERADMIN,
+} from '@/lib/auth/enums';
 
 /**
  * Reads the current NextAuth session on the server.
@@ -54,7 +58,7 @@ export function resolveActiveCompanyScopeFromSession(
   messages?: ActiveCompanyScopeMessagesType,
 ): ActionResult<ActiveCompanyScopeType> {
   if (!session.active_company_id) {
-    if (session.user.system_role === 'SUPERADMIN') {
+    if (session.user.system_role === SYSTEM_ROLE_SUPERADMIN) {
       return err(
         'FORBIDDEN',
         messages?.superadmin_missing_company ??
@@ -103,7 +107,7 @@ export function resolveNonStaffActiveCompanyScopeFromSession(
   session: Session,
   messages?: NonStaffActiveCompanyScopeMessagesType,
 ): ActionResult<NonStaffActiveCompanyScopeType> {
-  if (session.user.system_role === 'STAFF') {
+  if (session.user.system_role === SYSTEM_ROLE_STAFF) {
     return err(
       'FORBIDDEN',
       messages?.staff_forbidden ?? DEFAULT_STAFF_FORBIDDEN_MESSAGE,
@@ -137,7 +141,7 @@ export async function requireNonStaffActiveCompanyScope(
 export function resolveSuperadminSession(
   session: Session,
 ): ActionResult<Session> {
-  if (session.user.system_role !== 'SUPERADMIN') {
+  if (session.user.system_role !== SYSTEM_ROLE_SUPERADMIN) {
     return err('FORBIDDEN', 'Akses ditolak.');
   }
 

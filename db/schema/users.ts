@@ -1,10 +1,12 @@
-import { pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
-export const systemRoleEnum = pgEnum('system_role', [
-  'SUPERADMIN',
-  'ADMIN',
-  'STAFF',
-]);
+import { systemRoleEnum } from './auth-enums';
 
 export const users = pgTable(
   'users',

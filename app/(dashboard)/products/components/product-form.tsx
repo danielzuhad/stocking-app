@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ImagePlusIcon } from 'lucide-react';
+import { ImagePlusIcon, InfoIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { DeleteButton } from '@/components/ui/delete-button';
 import {
   Form,
   FormControl,
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/form';
 import { ImagePreviewDialog } from '@/components/ui/image-preview-dialog';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -36,7 +38,7 @@ import {
   PRODUCT_STATUS_LABELS,
   PRODUCT_UNIT_LABELS,
 } from '@/lib/products/enums';
-import { buildImageKitTransformUrl } from '@/lib/utils';
+import { buildImageKitTransformUrl, toSafeSlugSegment } from '@/lib/utils';
 import {
   createEmptyProductVariant,
   isProductVariantBlank,
@@ -49,8 +51,16 @@ import {
   type ProductFormValuesType,
 } from '@/lib/validation/products';
 
-import { createProductAction, updateProductAction } from '../actions';
-import { ProductDeleteButton } from './product-delete-button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  createProductAction,
+  deleteProductAction,
+  updateProductAction,
+} from '../actions';
 
 const ALLOWED_PRODUCT_IMAGE_MIME_TYPES = [
   'image/jpeg',
@@ -62,6 +72,11 @@ const MIN_PRODUCT_IMAGE_DIMENSION_PX = 120;
 const MAX_PRODUCT_IMAGE_DIMENSION_PX = 6000;
 const MAX_PRODUCT_IMAGE_UPLOAD_DIMENSION_PX = 2000;
 const PRODUCT_IMAGE_WEBP_QUALITY = 0.82;
+const IMAGE_MIME_EXTENSION_MAP = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+} as const;
 
 type ImageKitUploadAuthDataType = {
   token: string;
@@ -81,6 +96,102 @@ type ImageKitUploadResponseType = {
   height?: number;
   message?: string;
 };
+
+/**
+ * Structured ImageKit upload error with HTTP status context.
+ */
+class ImageKitUploadError extends Error {
+  status: number;
+  response: ImageKitUploadResponseType;
+
+  constructor(
+    message: string,
+    options: {
+      status: number;
+      response: ImageKitUploadResponseType;
+    },
+  ) {
+    super(message);
+    this.name = 'ImageKitUploadError';
+    this.status = options.status;
+    this.response = options.response;
+  }
+}
+
+/**
+ * Builds deterministic file name from product name for ImageKit uploads.
+ */
+function buildProductImageFileName(productName: string, file: File): string {
+  const productNameSlug = toSafeSlugSegment(productName);
+  const fallbackNameSlug = toSafeSlugSegment(file.name.replace(/\.[^.]+$/, ''));
+  const baseName = productNameSlug || fallbackNameSlug || 'product-image';
+
+  const extensionFromName = (() => {
+    const lastDotIndex = file.name.lastIndexOf('.');
+    if (lastDotIndex < 0 || lastDotIndex === file.name.length - 1) return null;
+    return file.name.slice(lastDotIndex + 1).toLowerCase();
+  })();
+  const extensionFromMime =
+    IMAGE_MIME_EXTENSION_MAP[
+      file.type as keyof typeof IMAGE_MIME_EXTENSION_MAP
+    ];
+  const extension = extensionFromName || extensionFromMime;
+
+  return extension ? `${baseName}.${extension}` : baseName;
+}
+
+/**
+ * Splits `name.ext` into base and extension for suffix retries.
+ */
+function splitFileNameParts(fileName: string): {
+  base_name: string;
+  extension: string | null;
+} {
+  const lastDotIndex = fileName.lastIndexOf('.');
+  if (lastDotIndex < 1 || lastDotIndex === fileName.length - 1) {
+    return {
+      base_name: fileName,
+      extension: null,
+    };
+  }
+
+  return {
+    base_name: fileName.slice(0, lastDotIndex),
+    extension: fileName.slice(lastDotIndex + 1),
+  };
+}
+
+/**
+ * Generates duplicate-safe filename using `_2`, `_3`, ... suffix.
+ */
+function buildDuplicateIndexedFileName(
+  fileName: string,
+  duplicateIndex: number,
+): string {
+  if (duplicateIndex <= 1) return fileName;
+
+  const parts = splitFileNameParts(fileName);
+  const suffix = `_${duplicateIndex}`;
+  if (!parts.extension) return `${parts.base_name}${suffix}`;
+
+  return `${parts.base_name}${suffix}.${parts.extension}`;
+}
+
+/**
+ * Detects upload conflict caused by existing filename on ImageKit.
+ */
+function isImageKitFileNameConflictError(error: unknown): boolean {
+  if (error instanceof ImageKitUploadError) {
+    if (error.status === 409) return true;
+    return /exists|already|duplicate|conflict|same name/i.test(error.message);
+  }
+
+  if (error instanceof Error) {
+    return /exists|already|duplicate|conflict|same name/i.test(error.message);
+  }
+
+  return false;
+}
 
 /**
  * Loads image object from temporary blob URL.
@@ -143,7 +254,15 @@ function uploadImageKitFileWithProgress(
           request.responseText,
         ) as ImageKitUploadResponseType;
         if (request.status < 200 || request.status >= 300) {
-          reject(new Error(parsedResponse.message ?? 'Upload foto gagal.'));
+          reject(
+            new ImageKitUploadError(
+              parsedResponse.message ?? 'Upload foto gagal.',
+              {
+                status: request.status,
+                response: parsedResponse,
+              },
+            ),
+          );
           return;
         }
         onProgress(100);
@@ -335,7 +454,7 @@ export function ProductForm({
   }, [form, watchedVariants]);
 
   const uploadProductImage = React.useCallback(
-    async (file: File): Promise<ProductImageValueType> => {
+    async (file: File, productName: string): Promise<ProductImageValueType> => {
       const authResponse = await fetch('/api/imagekit/auth', {
         method: 'POST',
       });
@@ -345,36 +464,55 @@ export function ProductForm({
         throw new Error(authResult.error.message);
       }
 
-      const payload = new FormData();
-      payload.append('file', file);
-      payload.append('fileName', file.name);
-      payload.append('publicKey', authResult.data.public_key);
-      payload.append('signature', authResult.data.signature);
-      payload.append('expire', String(authResult.data.expire));
-      payload.append('token', authResult.data.token);
-      payload.append('folder', authResult.data.folder);
-      payload.append(
-        'tags',
-        `products,company-${authResult.data.company_tag},module-products`,
-      );
-      payload.append('useUniqueFileName', 'true');
+      const preferredFileName = buildProductImageFileName(productName, file);
 
-      const uploadResult = await uploadImageKitFileWithProgress(
-        payload,
-        setImageUploadProgress,
-      );
+      for (let duplicateIndex = 1; duplicateIndex <= 20; duplicateIndex += 1) {
+        const payload = new FormData();
+        payload.append('file', file);
+        payload.append(
+          'fileName',
+          buildDuplicateIndexedFileName(preferredFileName, duplicateIndex),
+        );
+        payload.append('publicKey', authResult.data.public_key);
+        payload.append('signature', authResult.data.signature);
+        payload.append('expire', String(authResult.data.expire));
+        payload.append('token', authResult.data.token);
+        payload.append('folder', authResult.data.folder);
+        payload.append(
+          'tags',
+          `products,company-${authResult.data.company_tag},module-products`,
+        );
+        payload.append('useUniqueFileName', 'false');
+        payload.append('overwriteFile', 'false');
 
-      if (!uploadResult.fileId || !uploadResult.url) {
-        throw new Error(uploadResult.message ?? 'Upload foto gagal.');
+        try {
+          const uploadResult = await uploadImageKitFileWithProgress(
+            payload,
+            setImageUploadProgress,
+          );
+
+          if (!uploadResult.fileId || !uploadResult.url) {
+            throw new Error(uploadResult.message ?? 'Upload foto gagal.');
+          }
+
+          return {
+            file_id: uploadResult.fileId,
+            url: uploadResult.url,
+            thumbnail_url: uploadResult.thumbnailUrl,
+            width: uploadResult.width,
+            height: uploadResult.height,
+          };
+        } catch (error) {
+          if (isImageKitFileNameConflictError(error) && duplicateIndex < 20) {
+            continue;
+          }
+          throw error;
+        }
       }
 
-      return {
-        file_id: uploadResult.fileId,
-        url: uploadResult.url,
-        thumbnail_url: uploadResult.thumbnailUrl,
-        width: uploadResult.width,
-        height: uploadResult.height,
-      };
+      throw new Error(
+        'Nama file foto bentrok terlalu banyak. Coba ganti nama produk.',
+      );
     },
     [setImageUploadProgress],
   );
@@ -420,9 +558,9 @@ export function ProductForm({
         return nextPreviewUrl;
       });
       setPendingImageFile(optimizedFile);
-      toast.success(
-        `Foto siap diupload (${optimizedDimensions.width}x${optimizedDimensions.height}). Upload dilakukan saat simpan produk.`,
-      );
+      // toast.success(
+      //   `Foto siap diupload (${optimizedDimensions.width}x${optimizedDimensions.height}). Upload dilakukan saat simpan produk.`,
+      // );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : 'File foto tidak valid.',
@@ -444,7 +582,10 @@ export function ProductForm({
         if (pendingImageFile) {
           setIsImageUploading(true);
           setImageUploadProgress(0);
-          const uploadedImage = await uploadProductImage(pendingImageFile);
+          const uploadedImage = await uploadProductImage(
+            pendingImageFile,
+            normalizedValues.name,
+          );
           uploadedImageFileId = uploadedImage.file_id;
           normalizedValues = {
             ...normalizedValues,
@@ -584,7 +725,7 @@ export function ProductForm({
                 control={form.control}
                 name="name"
                 render={({ field }) => (
-                  <FormItem className="md:col-span-2">
+                  <FormItem>
                     <FormLabel>Nama produk</FormLabel>
                     <FormControl>
                       <Input
@@ -603,7 +744,17 @@ export function ProductForm({
                 name="category"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Kategori</FormLabel>
+                    <FormLabel className="flex items-center gap-1.5">
+                      Kategori{' '}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <InfoIcon className="text-muted-foreground size-3.5" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p> Untuk saat ini kategori dikunci ke General.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </FormLabel>
                     <Select
                       value={field.value}
                       onValueChange={field.onChange}
@@ -622,34 +773,7 @@ export function ProductForm({
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-muted-foreground text-xs">
-                      Untuk saat ini kategori dikunci ke General.
-                    </p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status produk</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Pilih status" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {PRODUCT_STATUS_OPTIONS.map((value) => (
-                          <SelectItem key={value} value={value}>
-                            {PRODUCT_STATUS_LABELS[value]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -679,6 +803,31 @@ export function ProductForm({
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status produk</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Pilih status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {PRODUCT_STATUS_OPTIONS.map((value) => (
+                          <SelectItem key={value} value={value}>
+                            {PRODUCT_STATUS_LABELS[value]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             <div className="space-y-4 rounded-lg border p-3">
@@ -700,7 +849,7 @@ export function ProductForm({
                       />
                     ) : (
                       <div className="bg-background/40 text-muted-foreground flex size-16 items-center justify-center rounded-md border border-dashed">
-                        <ImagePlusIcon className="size-6" />
+                        <ImagePlusIcon className="size-10" />
                       </div>
                     )}
                   </div>
@@ -708,11 +857,14 @@ export function ProductForm({
 
                 <div className="space-y-3 md:max-w-xl">
                   <div>
-                    <p className="text-sm font-medium">Foto produk</p>
+                    <p className="flex items-center gap-1.5 text-sm font-medium">
+                      Gambar produk{' '}
+                      <span className="text-muted-foreground text-xs">
+                        (maks 5MB)
+                      </span>
+                    </p>
                     <p className="text-muted-foreground text-xs">
-                      Upload 1 foto utama produk. Foto baru dikirim ke ImageKit
-                      saat klik Simpan produk. Format: JPG/PNG/WEBP, maksimal
-                      5MB.
+                      Format: JPG/PNG/WEBP.
                     </p>
                   </div>
 
@@ -775,10 +927,23 @@ export function ProductForm({
 
             <div className="space-y-3 rounded-lg">
               <div>
-                <p className="text-sm font-medium">Varian (opsional)</p>
-                <p className="text-muted-foreground text-xs">
-                  Kami sediakan 1 baris varian. Boleh dibiarkan kosong kalau
-                  produk ini tidak punya varian.
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  Varian{' '}
+                  <span className="text-muted-foreground text-xs">
+                    (Opsional)
+                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <InfoIcon className="text-muted-foreground size-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        {' '}
+                        Kami sediakan 1 baris varian. Boleh dibiarkan kosong
+                        kalau produk ini tidak punya varian.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 </p>
               </div>
 
@@ -830,22 +995,13 @@ export function ProductForm({
                             <FormItem>
                               <FormLabel>Harga jual</FormLabel>
                               <FormControl>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  placeholder="0"
+                                <NumberInput
                                   value={field.value}
-                                  onChange={(event) => {
-                                    const parsedPrice = Number(
-                                      event.currentTarget.value,
-                                    );
-                                    field.onChange(
-                                      Number.isFinite(parsedPrice)
-                                        ? parsedPrice
-                                        : 0,
-                                    );
-                                  }}
+                                  onBlur={field.onBlur}
+                                  onValueChange={field.onChange}
+                                  placeholder="0"
+                                  decimalScale={2}
+                                  leftAttachment="Rp"
                                 />
                               </FormControl>
                               <FormMessage />
@@ -932,12 +1088,23 @@ export function ProductForm({
               </div>
 
               {isEditMode && product_id ? (
-                <ProductDeleteButton
-                  product_id={product_id}
-                  product_name={watchedName || 'Produk'}
-                  redirect_to="/products"
+                <DeleteButton
+                  action={() => deleteProductAction({ product_id })}
+                  title="Hapus produk ini?"
+                  description={
+                    <>
+                      Produk <strong>{watchedName || 'Produk'}</strong> akan
+                      dihapus permanen bersama varian terkait. Aktivitas
+                      penghapusan tetap tercatat di log.
+                    </>
+                  }
+                  trigger_label="Hapus"
                   trigger_variant="destructive"
                   trigger_size="sm"
+                  success_toast_message="Produk berhasil dihapus."
+                  on_success={() => {
+                    router.push('/products');
+                  }}
                 />
               ) : null}
             </div>

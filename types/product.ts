@@ -13,4 +13,5 @@ export type ProductRowType = Pick<
   created_at: string;
   updated_at: string;
   variant_count: number;
+  variant_names: string[];
 };

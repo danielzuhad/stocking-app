@@ -6,6 +6,15 @@ import { z } from 'zod';
 
 import { db } from '@/db';
 import { memberships, users } from '@/db/schema';
+import {
+  isMembershipRole,
+  isSystemRole,
+  MEMBERSHIP_STATUS_ACTIVE,
+  SYSTEM_ROLE_STAFF,
+  SYSTEM_ROLE_SUPERADMIN,
+  type MembershipRoleType,
+  type SystemRoleType,
+} from '@/lib/auth/enums';
 import { env } from '@/env';
 import { logActivity } from '@/lib/audit';
 import { AUTH_ERROR } from '@/lib/auth/errors';
@@ -20,8 +29,8 @@ type AuthUser = {
   id: string;
   name: string;
   username: string;
-  system_role: 'SUPERADMIN' | 'ADMIN' | 'STAFF';
-  membership_role: 'ADMIN' | 'STAFF' | null;
+  system_role: SystemRoleType;
+  membership_role: MembershipRoleType | null;
   active_company_id: string | null;
 };
 
@@ -86,7 +95,7 @@ export const authOptions: NextAuthOptions = {
               .where(
                 and(
                   eq(memberships.user_id, user.id),
-                  eq(memberships.status, 'ACTIVE'),
+                  eq(memberships.status, MEMBERSHIP_STATUS_ACTIVE),
                 ),
               )
               .limit(1);
@@ -104,12 +113,12 @@ export const authOptions: NextAuthOptions = {
             return null;
           }
 
-          if (user.system_role === 'SUPERADMIN') {
+          if (user.system_role === SYSTEM_ROLE_SUPERADMIN) {
             return {
               id: user.id,
               name: user.username,
               username: user.username,
-              system_role: 'SUPERADMIN',
+              system_role: SYSTEM_ROLE_SUPERADMIN,
               membership_role: null,
               active_company_id: null,
             } satisfies AuthUser;
@@ -124,7 +133,7 @@ export const authOptions: NextAuthOptions = {
             .where(
               and(
                 eq(memberships.user_id, user.id),
-                eq(memberships.status, 'ACTIVE'),
+                eq(memberships.status, MEMBERSHIP_STATUS_ACTIVE),
               ),
             )
             .limit(1);
@@ -169,7 +178,7 @@ export const authOptions: NextAuthOptions = {
       if (
         trigger === 'update' &&
         session?.active_company_id !== undefined &&
-        token.system_role === 'SUPERADMIN'
+        token.system_role === SYSTEM_ROLE_SUPERADMIN
       ) {
         token.active_company_id = session.active_company_id;
       }
@@ -181,16 +190,12 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.sub ?? '';
         session.user.username =
           typeof token.username === 'string' ? token.username : '';
-        session.user.system_role =
-          token.system_role === 'SUPERADMIN' ||
-          token.system_role === 'ADMIN' ||
-          token.system_role === 'STAFF'
-            ? token.system_role
-            : 'STAFF';
-        session.user.membership_role =
-          token.membership_role === 'ADMIN' || token.membership_role === 'STAFF'
-            ? token.membership_role
-            : null;
+        session.user.system_role = isSystemRole(token.system_role)
+          ? token.system_role
+          : SYSTEM_ROLE_STAFF;
+        session.user.membership_role = isMembershipRole(token.membership_role)
+          ? token.membership_role
+          : null;
       }
 
       session.active_company_id =

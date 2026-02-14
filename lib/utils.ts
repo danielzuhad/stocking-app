@@ -2,6 +2,8 @@ import { clsx, type ClassValue } from 'clsx';
 import { Session } from 'next-auth';
 import { twMerge } from 'tailwind-merge';
 
+import { SYSTEM_ROLE_SUPERADMIN } from '@/lib/auth/enums';
+
 /** Merges Tailwind class names safely (shadcn pattern). */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -9,7 +11,7 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Returns `true` when the current user is a `SUPERADMIN`. */
 export function handleIsSuperAdmin(session: Session | null) {
-  return session?.user?.system_role === 'SUPERADMIN';
+  return session?.user?.system_role === SYSTEM_ROLE_SUPERADMIN;
 }
 
 /**
@@ -67,6 +69,20 @@ export function toSafeSlugSegment(value: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
+}
+
+/**
+ * Builds stable company asset folder segment: `<company-name-slug>_<company-id>`.
+ *
+ * Falls back to `companyId` when name cannot be slugged.
+ */
+export function buildCompanyAssetFolderSegment(
+  companyName: string | null | undefined,
+  companyId: string,
+): string {
+  const companyNameSlug = companyName ? toSafeSlugSegment(companyName) : '';
+  if (!companyNameSlug) return companyId;
+  return `${companyNameSlug}_${companyId}`;
 }
 
 /**

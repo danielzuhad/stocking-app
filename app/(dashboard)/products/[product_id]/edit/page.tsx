@@ -1,10 +1,11 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { z } from 'zod';
 
 import { EmptyState } from '@/components/ui/empty-state';
 import { db } from '@/db';
-import { products, productVariants } from '@/db/schema';
+import { products, productVariants, stockMovements } from '@/db/schema';
+import { STOCK_MOVEMENT_IN, STOCK_MOVEMENT_OUT } from '@/lib/inventory/enums';
 import {
   createEmptyProductVariant,
   inferProductHasVariants,
@@ -30,7 +31,7 @@ export default async function EditProductPage({
   if (!writeContext.ok) {
     return (
       <EmptyState
-        title="Edit Product"
+        title="Ubah Produk"
         description={writeContext.error.message}
       />
     );
@@ -80,8 +81,44 @@ export default async function EditProductPage({
     .orderBy(desc(productVariants.is_default), productVariants.created_at);
 
   const parsedImage = productImageSchema.nullable().safeParse(product.image ?? null);
+  const variantStockRows =
+    variants.length > 0
+      ? await db
+          .select({
+            product_variant_id: stockMovements.product_variant_id,
+            stock_qty: sql<string>`coalesce(
+              sum(
+                case
+                  when ${stockMovements.type} = ${STOCK_MOVEMENT_IN} then ${stockMovements.qty}
+                  when ${stockMovements.type} = ${STOCK_MOVEMENT_OUT} then ${stockMovements.qty} * -1
+                  else ${stockMovements.qty}
+                end
+              ),
+              0
+            )`,
+          })
+          .from(stockMovements)
+          .where(
+            and(
+              eq(stockMovements.company_id, writeContext.data.company_id),
+              inArray(
+                stockMovements.product_variant_id,
+                variants.map((variant) => variant.id),
+              ),
+            ),
+          )
+          .groupBy(stockMovements.product_variant_id)
+      : [];
+
+  const stockByVariantId = new Map<string, number>(
+    variantStockRows.map((row) => [
+      row.product_variant_id,
+      Number(row.stock_qty ?? 0),
+    ]),
+  );
 
   const has_variants = inferProductHasVariants(variants);
+  const fallbackVariant = variants.find((variant) => variant.is_default) ?? variants[0];
 
   const initial_values: ProductFormValuesType = {
     name: product.name,
@@ -98,16 +135,25 @@ export default async function EditProductPage({
             selling_price: Number(variant.selling_price),
             sku: variant.sku ?? '',
             barcode: variant.barcode ?? '',
+            opening_stock: stockByVariantId.get(variant.id) ?? 0,
             is_default: variant.is_default,
           }))
         : [createEmptyProductVariant({ is_default: true })]
-      : [createEmptyProductVariant({ is_default: true })],
+      : [
+          {
+            ...createEmptyProductVariant({ is_default: true }),
+            id: fallbackVariant?.id,
+            opening_stock: fallbackVariant
+              ? (stockByVariantId.get(fallbackVariant.id) ?? 0)
+              : 0,
+          },
+        ],
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Edit Produk</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Ubah Produk</h1>
         <p className="text-muted-foreground text-sm">
           Perbarui informasi produk, foto utama, dan daftar varian.
         </p>

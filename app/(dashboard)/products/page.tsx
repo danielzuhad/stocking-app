@@ -37,7 +37,7 @@ export default async function ProductsPage({
   });
   if (!productsResult.ok) {
     return (
-      <EmptyState title="Products" description={productsResult.error.message} />
+      <EmptyState title="Produk" description={productsResult.error.message} />
     );
   }
 
@@ -47,9 +47,9 @@ export default async function ProductsPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Products</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Produk</h1>
           <p className="text-muted-foreground text-sm">
-            Kelola master produk, varian, dan image.
+            Kelola master produk, varian, dan gambar.
           </p>
         </div>
         {can_write ? (

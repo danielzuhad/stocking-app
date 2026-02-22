@@ -48,7 +48,7 @@ export async function auditSuperadminImpersonation(
     .where(eq(companies.id, parsed.data.company_id))
     .limit(1);
 
-  if (!company) return err('NOT_FOUND', 'Company tidak ditemukan.');
+  if (!company) return err('NOT_FOUND', 'Perusahaan tidak ditemukan.');
 
   await logActivity(db, {
     company_id: company.id,

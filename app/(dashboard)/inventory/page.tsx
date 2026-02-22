@@ -1,11 +1,6 @@
-import { EmptyState } from '@/components/ui/empty-state';
+import { redirect } from 'next/navigation';
 
-/** Placeholder page for Inventory module. */
+/** Backward-compatible inventory root route. */
 export default function InventoryPage() {
-  return (
-    <EmptyState
-      title="Inventory"
-      description="Coming soon: stock ledger, receiving, opname, adjustments."
-    />
-  );
+  redirect('/inventory/stock');
 }

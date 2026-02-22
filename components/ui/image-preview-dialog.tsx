@@ -35,7 +35,7 @@ export function ImagePreviewDialog({
   alt,
   thumbnail_src,
   external_src,
-  title = 'Preview gambar',
+  title = 'Pratinjau gambar',
   description = 'Klik di luar dialog untuk menutup.',
   trigger_class_name,
   trigger_image_class_name,
@@ -47,7 +47,7 @@ export function ImagePreviewDialog({
       <DialogTrigger asChild>
         <button
           type="button"
-          aria-label="Lihat preview foto"
+          aria-label="Lihat pratinjau foto"
           className={cn(
             'group relative inline-flex overflow-hidden rounded-md border focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none',
             trigger_class_name,

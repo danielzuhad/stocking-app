@@ -42,6 +42,11 @@ export const productVariantFormSchema = z.object({
     .max(999999999999.99, 'Harga jual terlalu besar.'),
   sku: optionalTrimmedText(100),
   barcode: optionalTrimmedText(120),
+  opening_stock: z
+    .number()
+    .min(0, 'Stok awal tidak boleh negatif.')
+    .max(999999999999.99, 'Stok awal terlalu besar.')
+    .optional(),
   is_default: z.boolean().optional(),
 });
 
@@ -64,18 +69,6 @@ export const productFormSchema = z
         code: z.ZodIssueCode.custom,
         path: ['variants'],
         message: 'Tambahkan minimal satu varian.',
-      });
-    }
-
-    if (value.has_variants) {
-      value.variants.forEach((variant, index) => {
-        if (!variant.name || variant.name.trim().length === 0) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['variants', index, 'name'],
-            message: 'Nama varian wajib diisi.',
-          });
-        }
       });
     }
 
@@ -109,7 +102,9 @@ export const productFormSchema = z
   });
 
 export type ProductImageInputType = z.infer<typeof productImageSchema>;
-export type ProductVariantFormValueType = z.infer<typeof productVariantFormSchema>;
+export type ProductVariantFormValueType = z.infer<
+  typeof productVariantFormSchema
+>;
 export type ProductFormValuesType = z.infer<typeof productFormSchema>;
 
 /**
@@ -123,6 +118,7 @@ export function createEmptyProductVariant(options?: {
     selling_price: 0,
     sku: '',
     barcode: '',
+    opening_stock: 0,
     is_default: options?.is_default ?? false,
   };
 }
@@ -152,10 +148,20 @@ export function normalizeProductFormPayload(
   );
 
   if (meaningfulVariants.length === 0) {
+    const fallbackOpeningStock = values.variants[0]?.opening_stock ?? 0;
+
     return {
       ...values,
       has_variants: false,
-      variants: [],
+      variants:
+        fallbackOpeningStock > 0
+          ? [
+              {
+                ...createEmptyProductVariant({ is_default: true }),
+                opening_stock: fallbackOpeningStock,
+              },
+            ]
+          : [],
     };
   }
 

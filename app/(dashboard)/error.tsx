@@ -70,19 +70,19 @@ export default function DashboardError({
             <Separator />
             <details className="text-sm">
               <summary className="cursor-pointer font-medium select-none">
-                Developer details
+                Detail pengembang
               </summary>
               <div className="mt-3 space-y-3 text-xs">
                 <div className="grid gap-1">
                   <div>
-                    <span className="text-muted-foreground">Kind: </span>
+                    <span className="text-muted-foreground">Jenis: </span>
                     <span className="font-medium">
                       {presentation.developer.kind}
                     </span>
                   </div>
                   {presentation.developer.pathname ? (
                     <div>
-                      <span className="text-muted-foreground">Path: </span>
+                      <span className="text-muted-foreground">Rute: </span>
                       <span className="font-medium">
                         {presentation.developer.pathname}
                       </span>
@@ -98,14 +98,14 @@ export default function DashboardError({
 
                 <div className="grid gap-2">
                   <div>
-                    <div className="text-muted-foreground mb-1">Message</div>
+                    <div className="text-muted-foreground mb-1">Pesan</div>
                     <pre className="bg-muted text-foreground overflow-x-auto rounded-md p-3 text-xs leading-relaxed">
                       {presentation.developer.message}
                     </pre>
                   </div>
                   {presentation.developer.cause ? (
                     <div>
-                      <div className="text-muted-foreground mb-1">Cause</div>
+                      <div className="text-muted-foreground mb-1">Penyebab</div>
                       <pre className="bg-muted text-foreground overflow-x-auto rounded-md p-3 text-xs leading-relaxed">
                         {presentation.developer.cause}
                       </pre>
@@ -113,7 +113,7 @@ export default function DashboardError({
                   ) : null}
                   {presentation.developer.stack ? (
                     <div>
-                      <div className="text-muted-foreground mb-1">Stack</div>
+                      <div className="text-muted-foreground mb-1">Jejak stack</div>
                       <pre className="bg-muted text-foreground overflow-x-auto rounded-md p-3 text-xs leading-relaxed">
                         {presentation.developer.stack}
                       </pre>

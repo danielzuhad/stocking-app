@@ -43,7 +43,7 @@ function Button({
   size = 'default',
   asChild = false,
   isLoading = false,
-  loadingText = 'Loading...',
+  loadingText = 'Memuat...',
   disabled,
   children,
   ...props

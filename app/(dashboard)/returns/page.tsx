@@ -4,8 +4,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 export default function ReturnsPage() {
   return (
     <EmptyState
-      title="Returns"
-      description="Coming soon: partial return + restock/write-off."
+      title="Retur"
+      description="Segera hadir: retur parsial + restock/write-off."
     />
   );
 }

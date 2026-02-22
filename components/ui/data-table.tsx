@@ -279,13 +279,13 @@ function DataTablePagination<TData>({
             disabled={isLoading}
             aria-busy={isLoading || undefined}
           >
-            Baris
             <span className="text-foreground font-medium">{pageSize}</span>
+            Baris
             <ChevronDownIcon className="size-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Rows per page</DropdownMenuLabel>
+          <DropdownMenuLabel>Baris per halaman</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuRadioGroup
             value={String(pageSize)}

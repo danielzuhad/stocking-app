@@ -42,8 +42,8 @@ type ActiveCompanyScopeMessagesType = {
 };
 
 const DEFAULT_SUPERADMIN_MISSING_COMPANY_MESSAGE =
-  'Pilih company impersonation dulu.';
-const DEFAULT_MISSING_COMPANY_MESSAGE = 'Company aktif tidak ditemukan.';
+  'Pilih perusahaan dulu untuk mode penyamaran.';
+const DEFAULT_MISSING_COMPANY_MESSAGE = 'Perusahaan aktif tidak ditemukan.';
 const DEFAULT_STAFF_FORBIDDEN_MESSAGE = 'Akses ditolak.';
 
 /**

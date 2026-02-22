@@ -9,7 +9,7 @@ export default async function NewProductPage() {
   if (!writeContext.ok) {
     return (
       <EmptyState
-        title="Create Product"
+        title="Tambah Produk"
         description={writeContext.error.message}
       />
     );
@@ -21,7 +21,7 @@ export default async function NewProductPage() {
         <h1 className="text-xl font-semibold tracking-tight">Tambah Produk</h1>
         <p className="text-muted-foreground text-sm">
           Lengkapi data dasar, foto produk, dan varian bila diperlukan.
-          Pengelolaan stok dilakukan di modul inventory.
+          Pengelolaan stok dilakukan di modul stok.
         </p>
       </div>
       <ProductForm mode="create" />

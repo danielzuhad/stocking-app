@@ -4,8 +4,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 export default function SettingsPage() {
   return (
     <EmptyState
-      title="Settings"
-      description="Coming soon: users & roles, company settings, integrations."
+      title="Pengaturan"
+      description="Segera hadir: pengguna & peran, pengaturan perusahaan, dan integrasi."
     />
   );
 }

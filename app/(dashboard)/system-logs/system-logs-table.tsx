@@ -27,9 +27,9 @@ const columns: Array<ColumnDef<SystemLogType>> = [
   },
   {
     accessorKey: 'company_name',
-    meta: { label: 'Company' },
+    meta: { label: 'Perusahaan' },
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Company" />
+      <DataTableColumnHeader column={column} title="Perusahaan" />
     ),
     cell: ({ row }) => (
       <div className="min-w-0">

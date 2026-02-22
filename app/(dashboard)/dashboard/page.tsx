@@ -9,6 +9,12 @@ import { redirect } from 'next/navigation';
 import { handleIsSuperAdmin } from '@/lib/utils';
 import { CompanySwitcher } from './company-switcher';
 
+const SYSTEM_ROLE_LABELS = {
+  SUPERADMIN: 'Superadmin',
+  ADMIN: 'Admin',
+  STAFF: 'Staf',
+} as const;
+
 /** Dashboard landing page (superadmin can set impersonation). */
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -38,19 +44,21 @@ export default async function DashboardPage() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <CardTitle>Dashboard</CardTitle>
+          <CardTitle>Ringkasan Akun</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div>
-            <span className="text-muted-foreground">User: </span>
+            <span className="text-muted-foreground">Pengguna: </span>
             <span className="font-medium">{session.user.username}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">System role: </span>
-            <span className="font-medium">{session.user.system_role}</span>
+            <span className="text-muted-foreground">Peran sistem: </span>
+            <span className="font-medium">
+              {SYSTEM_ROLE_LABELS[session.user.system_role]}
+            </span>
           </div>
           <div>
-            <span className="text-muted-foreground">Active company: </span>
+            <span className="text-muted-foreground">Perusahaan aktif: </span>
             <span className="font-medium">
               {session.active_company_id ?? '—'}
             </span>

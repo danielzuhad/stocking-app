@@ -10,6 +10,17 @@ Aplikasi manajemen stok multi-perusahaan (multi-tenant) untuk berbagai jenis pro
 
 > Prinsip utama: **admin/staff hanya melihat & mengubah data perusahaannya (company scope)**. Superadmin bisa akses lintas perusahaan dan **selalu boleh mengakses semua modul/fitur**.
 
+## Status Implementasi Saat Ini (MVP Bertahap)
+
+- ✅ Auth credentials + tenant scope (`active_company_id`) + superadmin impersonation.
+- ✅ Master products + variants + upload gambar (ImageKit) + audit log.
+- ✅ Inventory MVP dasar:
+  - stock ledger (`stock_movements`) dengan event `IN/OUT/ADJUST`
+  - receiving (`DRAFT -> POSTED/VOID`)
+  - stock adjustment (no minus stock)
+  - stock opname (`IN_PROGRESS -> FINALIZED/VOID`) + blokir posting mutasi saat opname aktif
+- 🚧 Sales/Returns/Reports/Settings masih bertahap.
+
 ### Tenancy & Active Company
 
 - Untuk MVP: **1 user = 1 company** untuk `ADMIN` dan `STAFF`. Setelah login, seluruh halaman/list/report otomatis ter-scope ke company tersebut (tanpa company picker/switcher).
@@ -68,6 +79,10 @@ Aplikasi manajemen stok multi-perusahaan (multi-tenant) untuk berbagai jenis pro
 
 - Penerimaan barang dipakai untuk mencatat stok masuk dengan reference yang jelas (supplier + nomor invoice/nota, opsional).
 - Lifecycle sederhana: `DRAFT` → `RECEIVED/POSTED` (final) atau `VOID`.
+- Pada form create receiving, user bisa memilih status awal: simpan sebagai `DRAFT`
+  atau langsung `POSTED`.
+- UI create receiving menggunakan halaman khusus (bukan quick dialog) agar input
+  banyak produk/varian lebih nyaman.
 - Saat `RECEIVED/POSTED`, sistem membuat **stock movement IN** per item (dan per lot bila expiry tracking dipakai).
 - MVP: penerimaan barang fokus ke qty + reference (tanpa costing). **Unit cost/COGS** bisa ditambahkan nanti untuk laporan margin.
 - “Stok awal” (first-time setup) direkomendasikan masuk lewat penerimaan barang atau adjustment dengan reason `INITIAL_STOCK` agar tetap teraudit.

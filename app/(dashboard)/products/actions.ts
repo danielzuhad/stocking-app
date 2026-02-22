@@ -6,11 +6,24 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/db';
-import { companies, products, productVariants } from '@/db/schema';
+import {
+  companies,
+  productVariants,
+  products,
+  stockAdjustmentItems,
+  stockAdjustments,
+  stockMovements,
+  stockOpnames,
+} from '@/db/schema';
 import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
 import { logActivity } from '@/lib/audit';
 import { env } from '@/env';
 import { getErrorPresentation } from '@/lib/errors/presentation';
+import {
+  STOCK_MOVEMENT_ADJUST,
+  STOCK_MOVEMENT_REFERENCE_ADJUSTMENT,
+  STOCK_OPNAME_STATUS_IN_PROGRESS,
+} from '@/lib/inventory/enums';
 import { PRODUCT_DEFAULT_CATEGORY } from '@/lib/products/enums';
 import {
   buildCompanyAssetFolderSegment,
@@ -28,6 +41,7 @@ import { requireProductsWriteContext } from './guards';
 
 const PRODUCTS_PATH = '/products';
 const DEFAULT_VARIANT_FALLBACK_NAME = 'Default';
+const INITIAL_STOCK_ADJUSTMENT_REASON = 'INITIAL_STOCK';
 
 type NormalizedVariantInputType = {
   id?: string;
@@ -35,6 +49,7 @@ type NormalizedVariantInputType = {
   selling_price: number;
   sku: string | null;
   barcode: string | null;
+  opening_stock: number;
   is_default: boolean;
 };
 
@@ -48,6 +63,8 @@ function normalizeVariantsInput(
   options?: { fallback_existing_default_variant_id?: string },
 ): NormalizedVariantInputType[] {
   if (!input.has_variants || input.variants.length === 0) {
+    const fallbackOpeningStock = input.variants[0]?.opening_stock ?? 0;
+
     return [
       {
         id: options?.fallback_existing_default_variant_id,
@@ -55,6 +72,7 @@ function normalizeVariantsInput(
         selling_price: 0,
         sku: null,
         barcode: null,
+        opening_stock: fallbackOpeningStock,
         is_default: true,
       },
     ];
@@ -66,6 +84,7 @@ function normalizeVariantsInput(
     selling_price: variant.selling_price,
     sku: toNullableTrimmedText(variant.sku),
     barcode: toNullableTrimmedText(variant.barcode),
+    opening_stock: Number(variant.opening_stock ?? 0),
     is_default: Boolean(variant.is_default),
   }));
 
@@ -257,7 +276,7 @@ async function ensureProductImageOwnership(input: {
     if (!details.filePath.startsWith(`/products/${input.company_folder}/`)) {
       return err(
         'FORBIDDEN',
-        'Foto produk tidak valid untuk company yang sedang aktif.',
+        'Foto produk tidak valid untuk perusahaan yang sedang aktif.',
       );
     }
   } catch (error) {
@@ -410,6 +429,30 @@ export async function createProductAction(
   });
   if (!uniquenessResult.ok) return uniquenessResult;
 
+  const totalOpeningStock = variants.reduce(
+    (total, variant) => total + variant.opening_stock,
+    0,
+  );
+  if (totalOpeningStock > 0) {
+    const [activeStockOpname] = await db
+      .select({ id: stockOpnames.id })
+      .from(stockOpnames)
+      .where(
+        and(
+          eq(stockOpnames.company_id, company_id),
+          eq(stockOpnames.status, STOCK_OPNAME_STATUS_IN_PROGRESS),
+        ),
+      )
+      .limit(1);
+
+    if (activeStockOpname) {
+      return err(
+        'CONFLICT',
+        'Stok opname sedang berjalan. Posting mutasi stok diblokir sampai opname selesai.',
+      );
+    }
+  }
+
   try {
     const created = await db.transaction(async (tx) => {
       const now = new Date();
@@ -428,19 +471,85 @@ export async function createProductAction(
         })
         .returning({ id: products.id });
 
-      await tx.insert(productVariants).values(
-        variants.map((variant) => ({
+      const createdVariants = await tx
+        .insert(productVariants)
+        .values(
+          variants.map((variant) => ({
+            company_id,
+            product_id: createdProduct!.id,
+            name: variant.name,
+            sku: variant.sku,
+            barcode: variant.barcode,
+            selling_price: toFixedScaleNumberText(variant.selling_price),
+            is_default: variant.is_default,
+            created_at: now,
+            updated_at: now,
+          })),
+        )
+        .returning({ id: productVariants.id });
+
+      const initialStockRows = createdVariants
+        .map((createdVariant, index) => ({
+          product_variant_id: createdVariant.id,
+          qty_diff: variants[index]?.opening_stock ?? 0,
+        }))
+        .filter((row) => row.qty_diff > 0);
+
+      if (initialStockRows.length > 0) {
+        const [createdAdjustment] = await tx
+          .insert(stockAdjustments)
+          .values({
+            company_id,
+            reason: INITIAL_STOCK_ADJUSTMENT_REASON,
+            note: 'Stok awal dari pembuatan produk',
+            created_by: session.user.id,
+            created_at: now,
+          })
+          .returning({ id: stockAdjustments.id });
+
+        await tx.insert(stockAdjustmentItems).values(
+          initialStockRows.map((row) => ({
+            company_id,
+            stock_adjustment_id: createdAdjustment!.id,
+            product_variant_id: row.product_variant_id,
+            qty_diff: toFixedScaleNumberText(row.qty_diff),
+            note: INITIAL_STOCK_ADJUSTMENT_REASON,
+            created_at: now,
+          })),
+        );
+
+        await tx.insert(stockMovements).values(
+          initialStockRows.map((row) => ({
+            company_id,
+            product_variant_id: row.product_variant_id,
+            type: STOCK_MOVEMENT_ADJUST,
+            qty: toFixedScaleNumberText(row.qty_diff),
+            reference_type: STOCK_MOVEMENT_REFERENCE_ADJUSTMENT,
+            reference_id: createdAdjustment!.id,
+            note: INITIAL_STOCK_ADJUSTMENT_REASON,
+            created_by: session.user.id,
+            created_at: now,
+            effective_at: now,
+          })),
+        );
+
+        await logActivity(tx, {
           company_id,
-          product_id: createdProduct!.id,
-          name: variant.name,
-          sku: variant.sku,
-          barcode: variant.barcode,
-          selling_price: toFixedScaleNumberText(variant.selling_price),
-          is_default: variant.is_default,
-          created_at: now,
-          updated_at: now,
-        })),
-      );
+          actor_user_id: session.user.id,
+          action: 'inventory.adjustment.posted',
+          target_type: 'stock_adjustment',
+          target_id: createdAdjustment!.id,
+          meta: {
+            source: 'products.create',
+            reason: INITIAL_STOCK_ADJUSTMENT_REASON,
+            item_count: initialStockRows.length,
+            total_qty_diff: initialStockRows.reduce(
+              (total, row) => total + row.qty_diff,
+              0,
+            ),
+          },
+        });
+      }
 
       await logActivity(tx, {
         company_id,
@@ -452,6 +561,7 @@ export async function createProductAction(
           variant_count: variants.length,
           has_variants: parsed.data.has_variants,
           has_image: Boolean(parsed.data.image),
+          total_initial_stock: totalOpeningStock,
         },
       });
 

@@ -50,7 +50,7 @@ export default function LoginPage() {
                 <div className="pointer-events-none absolute inset-0 rounded-full bg-linear-to-b from-white/20 via-white/5 to-transparent dark:from-white/10" />
                 <span className="bg-primary relative size-2 rounded-full" />
                 <span className="text-foreground relative">
-                  Inventory + invoice untuk multi outlet
+                  Stok + invoice untuk multi outlet
                 </span>
               </div>
 

@@ -1,5 +1,8 @@
 import {
   ActivityIcon,
+  ClipboardCheckIcon,
+  ClipboardMinusIcon,
+  ClipboardPlusIcon,
   BarChart3Icon,
   Building2Icon,
   LayoutDashboardIcon,
@@ -31,7 +34,7 @@ type NavConfig = {
 const navConfig: NavConfig = {
   common: [
     {
-      label: 'Main',
+      label: 'Utama',
       items: [
         {
           title: 'Dashboard',
@@ -41,50 +44,65 @@ const navConfig: NavConfig = {
       ],
     },
     {
-      label: 'Master',
+      label: 'Master Data',
       items: [
         {
-          title: 'Products',
+          title: 'Produk',
           href: '/products',
           icon: PackageIcon,
         },
       ],
     },
     {
-      label: 'Operations',
+      label: 'Operasional',
       items: [
         {
-          title: 'Inventory',
-          href: '/inventory',
+          title: 'Stok Barang',
+          href: '/inventory/stock',
           icon: WarehouseIcon,
         },
         {
-          title: 'Sales',
+          title: 'Barang Masuk',
+          href: '/inventory/receivings',
+          icon: ClipboardPlusIcon,
+        },
+        {
+          title: 'Penyesuaian Stok',
+          href: '/inventory/adjustments',
+          icon: ClipboardMinusIcon,
+        },
+        {
+          title: 'Stok Opname',
+          href: '/inventory/opnames',
+          icon: ClipboardCheckIcon,
+        },
+        {
+          title: 'Penjualan',
           href: '/sales',
           icon: ReceiptTextIcon,
         },
       ],
     },
     {
-      label: 'Insights',
+      label: 'Monitoring',
       items: [
         {
-          title: 'Reports',
+          title: 'Laporan',
           href: '/reports',
           icon: BarChart3Icon,
         },
         {
-          title: 'Activity Logs',
+          title: 'Log Aktivitas',
           href: '/activity-logs',
           icon: ActivityIcon,
         },
       ],
     },
     {
-      label: 'Settings',
+      label: 'Pengaturan',
       items: [
         {
-          title: 'Settings',
+          title: 'Pengaturan',
           href: '/settings',
           icon: SettingsIcon,
         },
@@ -93,15 +111,15 @@ const navConfig: NavConfig = {
   ],
   superadmin: [
     {
-      label: 'Platform (Superadmin)',
+      label: 'Platform Superadmin',
       items: [
         {
-          title: 'Companies',
+          title: 'Perusahaan',
           href: '/companies',
           icon: Building2Icon,
         },
         {
-          title: 'System Logs',
+          title: 'Log Sistem',
           href: '/system-logs',
           icon: ShieldIcon,
         },

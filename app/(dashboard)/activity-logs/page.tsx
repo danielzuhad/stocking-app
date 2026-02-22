@@ -29,7 +29,7 @@ export default async function ActivityLogsPage({
   if (!logsResult.ok) {
     return (
       <EmptyState
-        title="Activity Logs"
+        title="Log Aktivitas"
         description={logsResult.error.message}
       />
     );

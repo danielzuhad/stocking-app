@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "stock_opnames_active_company_unique" ON "stock_opnames" USING btree ("company_id") WHERE "stock_opnames"."status" = 'IN_PROGRESS';

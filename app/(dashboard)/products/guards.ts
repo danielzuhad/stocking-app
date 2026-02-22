@@ -25,9 +25,9 @@ export function resolveProductsWriteContextFromSession(
   session: Session,
 ): ActionResult<ProductsWriteContextType> {
   return resolveNonStaffActiveCompanyScopeFromSession(session, {
-    staff_forbidden: 'Akses ditolak. Kamu tidak punya izin mengelola products.',
+    staff_forbidden: 'Akses ditolak. Kamu tidak punya izin mengelola produk.',
     superadmin_missing_company:
-      'Pilih company impersonation dulu untuk mengelola products.',
+      'Pilih perusahaan dulu untuk mode penyamaran sebelum mengelola produk.',
   });
 }
 
@@ -38,8 +38,8 @@ export async function requireProductsWriteContext(): Promise<
   ActionResult<ProductsWriteContextType>
 > {
   return requireNonStaffActiveCompanyScope({
-    staff_forbidden: 'Akses ditolak. Kamu tidak punya izin mengelola products.',
+    staff_forbidden: 'Akses ditolak. Kamu tidak punya izin mengelola produk.',
     superadmin_missing_company:
-      'Pilih company impersonation dulu untuk mengelola products.',
+      'Pilih perusahaan dulu untuk mode penyamaran sebelum mengelola produk.',
   });
 }

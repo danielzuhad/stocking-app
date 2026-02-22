@@ -63,6 +63,7 @@ function buildInitialValues(
         selling_price: 0,
         sku: '',
         barcode: '',
+        opening_stock: 0,
         is_default: true,
       },
     ],
@@ -93,7 +94,7 @@ describe('ProductForm', () => {
 
     expect(screen.getByLabelText('Nama produk')).toBeInTheDocument();
     expect(categoryInput).toBeDisabled();
-    expect(categoryInput).toHaveTextContent('General');
+    expect(categoryInput).toHaveTextContent('Umum');
     expect(screen.getByText('Varian 1')).toBeInTheDocument();
     expect(screen.queryByText('Varian 2')).not.toBeInTheDocument();
   });

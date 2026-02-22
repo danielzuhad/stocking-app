@@ -23,13 +23,13 @@ export function ThemeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Theme">
+        <Button variant="ghost" size="icon" aria-label="Tema">
           <SunIcon className="dark:hidden" />
           <MoonIcon className="hidden dark:block" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Theme</DropdownMenuLabel>
+        <DropdownMenuLabel>Tema</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuRadioGroup
           value={theme ?? 'system'}
@@ -37,15 +37,15 @@ export function ThemeToggle() {
         >
           <DropdownMenuRadioItem value="system">
             <LaptopMinimalIcon className="size-4" />
-            System
+            Sistem
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="light">
             <SunIcon className="size-4" />
-            Light
+            Terang
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="dark">
             <MoonIcon className="size-4" />
-            Dark
+            Gelap
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>

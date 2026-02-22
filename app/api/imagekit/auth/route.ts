@@ -23,7 +23,7 @@ export async function POST() {
   const scopeResult = await requireNonStaffActiveCompanyScope({
     staff_forbidden: 'Akses ditolak.',
     superadmin_missing_company:
-      'Pilih company impersonation dulu untuk mengelola products.',
+      'Pilih perusahaan dulu untuk mode penyamaran sebelum mengelola produk.',
   });
   if (!scopeResult.ok) {
     return NextResponse.json(scopeResult, {

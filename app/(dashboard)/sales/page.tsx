@@ -4,8 +4,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 export default function SalesPage() {
   return (
     <EmptyState
-      title="Sales"
-      description="Coming soon: invoices (draft → posted) + stock out."
+      title="Penjualan"
+      description="Segera hadir: invoice (draf → posted) + pengurangan stok."
     />
   );
 }

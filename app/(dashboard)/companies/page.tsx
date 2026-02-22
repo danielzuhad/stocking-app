@@ -12,8 +12,8 @@ export default async function CompaniesPage() {
 
   return (
     <EmptyState
-      title="Companies"
-      description="Coming soon (superadmin): create company, set limits, manage status."
+      title="Perusahaan"
+      description="Segera hadir (superadmin): buat perusahaan, atur limit, dan kelola status."
     />
   );
 }

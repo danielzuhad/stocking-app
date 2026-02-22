@@ -751,7 +751,7 @@ export function ProductForm({
                           <InfoIcon className="text-muted-foreground size-3.5" />
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p> Untuk saat ini kategori dikunci ke General.</p>
+                          <p>Untuk saat ini kategori dikunci ke Umum.</p>
                         </TooltipContent>
                       </Tooltip>
                     </FormLabel>
@@ -945,6 +945,11 @@ export function ProductForm({
                     </TooltipContent>
                   </Tooltip>
                 </p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {isEditMode
+                    ? 'Stok bersifat hanya baca di halaman produk. Gunakan modul Stok untuk mutasi stok.'
+                    : 'Isi stok awal saat membuat produk agar tidak perlu input ulang di modul Stok.'}
+                </p>
               </div>
 
               <div className="space-y-4">
@@ -1002,6 +1007,31 @@ export function ProductForm({
                                   placeholder="0"
                                   decimalScale={2}
                                   leftAttachment="Rp"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`variants.${index}.opening_stock`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>
+                                {isEditMode
+                                  ? 'Stok saat ini (hanya baca)'
+                                  : 'Stok awal'}
+                              </FormLabel>
+                              <FormControl>
+                                <NumberInput
+                                  value={field.value}
+                                  onBlur={field.onBlur}
+                                  onValueChange={field.onChange}
+                                  placeholder="0"
+                                  decimalScale={2}
+                                  disabled={isEditMode}
                                 />
                               </FormControl>
                               <FormMessage />

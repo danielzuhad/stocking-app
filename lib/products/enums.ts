@@ -26,8 +26,8 @@ export type { ProductCategoryType, ProductStatusType, ProductUnitType };
 /** User-friendly labels for product category enum values. */
 export const PRODUCT_CATEGORY_LABELS: Record<ProductCategoryType, string> = {
   FASHION: 'Fashion',
-  COSMETIC: 'Cosmetic',
-  GENERAL: 'General',
+  COSMETIC: 'Kosmetik',
+  GENERAL: 'Umum',
 };
 
 /** User-friendly labels for product status enum values. */

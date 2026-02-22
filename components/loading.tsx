@@ -10,8 +10,8 @@ type LoadingProps = {
 };
 
 export default function LoadingPage({
-  title = 'Loading page',
-  description = 'Please wait a moment. We are preparing the content.',
+  title = 'Memuat halaman',
+  description = 'Tunggu sebentar, kami sedang menyiapkan konten.',
   className,
 }: LoadingProps) {
   return (
@@ -59,7 +59,7 @@ export default function LoadingPage({
                   Stockly
                 </p>
                 <p className="text-muted-foreground text-xs">
-                  Inventory &amp; invoice untuk operasional harian
+                  Stok &amp; invoice untuk operasional harian
                 </p>
               </div>
             </div>

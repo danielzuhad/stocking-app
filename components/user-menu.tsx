@@ -27,6 +27,12 @@ import {
 import { auditClearSuperadminImpersonation } from '../app/(dashboard)/actions/impersonation';
 import type { SystemRole } from './nav';
 
+const SYSTEM_ROLE_LABELS: Record<SystemRole, string> = {
+  SUPERADMIN: 'Superadmin',
+  ADMIN: 'Admin',
+  STAFF: 'Staf',
+};
+
 /**
  * User dropdown menu (sign out, settings, superadmin impersonation controls).
  */
@@ -66,15 +72,15 @@ export function UserMenu({
             {isSuperadmin ? (
               <Badge variant="secondary">
                 <ShieldCheckIcon className="size-3" />
-                SUPERADMIN
+                {SYSTEM_ROLE_LABELS.SUPERADMIN}
               </Badge>
             ) : (
-              <Badge variant="secondary">{system_role}</Badge>
+              <Badge variant="secondary">{SYSTEM_ROLE_LABELS[system_role]}</Badge>
             )}
           </div>
           {isImpersonating ? (
             <div className="text-muted-foreground text-xs">
-              Impersonating: {active_company_id}
+              Mode penyamaran: {active_company_id}
             </div>
           ) : null}
         </DropdownMenuLabel>
@@ -94,12 +100,12 @@ export function UserMenu({
 
                   await update({ active_company_id: null });
                   router.refresh();
-                  toast.success('Impersonation dimatikan.');
+                  toast.success('Mode penyamaran dimatikan.');
                 });
               }}
             >
               <UserIcon className="size-4" />
-              Keluar impersonation
+              Keluar mode penyamaran
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
@@ -108,7 +114,7 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/settings">
             <SettingsIcon className="size-4" />
-            Settings
+            Pengaturan
           </Link>
         </DropdownMenuItem>
 
@@ -119,7 +125,7 @@ export function UserMenu({
           onClick={() => signOut({ callbackUrl: '/login' })}
         >
           <LogOutIcon className="size-4" />
-          Logout
+          Keluar
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

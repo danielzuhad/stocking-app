@@ -89,9 +89,9 @@ function resolveActivityLogContextFromSession(
   session: Session,
 ): ActionResult<ActivityLogContextType> {
   const scopeResult = resolveNonStaffActiveCompanyScopeFromSession(session, {
-    staff_forbidden: 'Akses activity logs hanya untuk admin.',
+    staff_forbidden: 'Akses log aktivitas hanya untuk admin.',
     superadmin_missing_company:
-      'Pilih company impersonation dulu untuk melihat activity logs.',
+      'Pilih perusahaan dulu untuk mode penyamaran sebelum melihat log aktivitas.',
   });
   if (!scopeResult.ok) return scopeResult;
 

@@ -22,7 +22,7 @@ export default async function SystemLogsPage({
   if (!sessionResult.ok) {
     return (
       <EmptyState
-        title="System Logs"
+        title="Log Sistem"
         description={sessionResult.error.message}
       />
     );
@@ -41,7 +41,7 @@ export default async function SystemLogsPage({
   );
   if (!logsResult.ok) {
     return (
-      <EmptyState title="System Logs" description={logsResult.error.message} />
+      <EmptyState title="Log Sistem" description={logsResult.error.message} />
     );
   }
 

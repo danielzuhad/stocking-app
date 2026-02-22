@@ -34,7 +34,7 @@ export function CompanySwitcher({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <CardTitle>Impersonation</CardTitle>
+        <CardTitle>Mode Penyamaran Perusahaan</CardTitle>
         <Button
           variant="outline"
           size="sm"
@@ -58,7 +58,8 @@ export function CompanySwitcher({
       <CardContent className="space-y-3">
         {companies.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            Belum ada company. Buat company dulu (sementara bisa lewat DB/seed).
+            Belum ada perusahaan. Buat perusahaan dulu (sementara bisa lewat
+            DB/seed).
           </p>
         ) : (
           <div className="grid gap-2">
@@ -92,7 +93,7 @@ export function CompanySwitcher({
                 </span>
                 {active_company_id === c.id ? (
                   <span className="text-primary text-xs font-semibold">
-                    ACTIVE
+                    AKTIF
                   </span>
                 ) : null}
               </button>

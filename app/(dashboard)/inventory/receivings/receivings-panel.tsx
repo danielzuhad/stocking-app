@@ -3,10 +3,9 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
-import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { ConfirmActionButton } from '@/components/ui/confirm-action-button';
 import { DataTable, DataTableColumnHeader } from '@/components/ui/data-table';
 import {
   RECEIVING_STATUS_DRAFT,
@@ -27,14 +26,15 @@ function ReceivingStatusBadge({
   if (status === 'POSTED') return <Badge>{label}</Badge>;
   if (status === 'DRAFT') return <Badge variant="secondary">{label}</Badge>;
 
-  return <Badge variant="outline">{label}</Badge>;
+  return <Badge variant="destructive">{label}</Badge>;
 }
 
 function buildColumns(input: {
   can_write: boolean;
   is_pending: boolean;
-  on_post: (receiving_id: string) => void;
-  on_void: (receiving_id: string) => void;
+  on_post: (receiving_id: string) => ReturnType<typeof postReceivingAction>;
+  on_void: (receiving_id: string) => ReturnType<typeof voidReceivingAction>;
+  on_mutation_success: () => void;
 }): Array<ColumnDef<ReceivingRowType>> {
   const baseColumns: Array<ColumnDef<ReceivingRowType>> = [
     {
@@ -122,22 +122,31 @@ function buildColumns(input: {
 
         return (
           <div className="flex justify-end gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => input.on_post(row.original.id)}
+            <ConfirmActionButton
+              action={() => input.on_post(row.original.id)}
+              title="Posting barang masuk ini?"
+              description="Dokumen akan diposting dan stok akan bertambah sesuai item."
+              trigger_label="Posting"
+              trigger_variant="outline"
+              confirm_label="Ya, posting"
+              confirm_pending_label="Memposting..."
+              success_toast_message="Barang masuk berhasil diposting."
+              on_success={input.on_mutation_success}
               disabled={input.is_pending}
-            >
-              Posting
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => input.on_void(row.original.id)}
+            />
+            <ConfirmActionButton
+              action={() => input.on_void(row.original.id)}
+              title="Batalkan barang masuk ini?"
+              description="Dokumen akan dibatalkan dan tidak bisa diposting kembali."
+              trigger_label="Batalkan"
+              trigger_variant="destructive"
+              confirm_variant="destructive"
+              confirm_label="Ya, batalkan"
+              confirm_pending_label="Membatalkan..."
+              success_toast_message="Barang masuk berhasil dibatalkan."
+              on_success={input.on_mutation_success}
               disabled={input.is_pending}
-            >
-              Batalkan
-            </Button>
+            />
           </div>
         );
       },
@@ -157,46 +166,39 @@ export function ReceivingsPanel({
   const [isPending, startTransition] = React.useTransition();
 
   const handlePostReceiving = React.useCallback(
-    (receivingId: string) => {
-      startTransition(async () => {
-        const result = await postReceivingAction({ receiving_id: receivingId });
-        if (!result.ok) {
-          toast.error(result.error.message);
-          return;
-        }
-
-        toast.success('Barang masuk berhasil diposting.');
-        router.refresh();
-      });
-    },
-    [router, startTransition],
+    (receivingId: string) => postReceivingAction({ receiving_id: receivingId }),
+    [],
   );
 
   const handleVoidReceiving = React.useCallback(
-    (receivingId: string) => {
-      startTransition(async () => {
-        const result = await voidReceivingAction({ receiving_id: receivingId });
-        if (!result.ok) {
-          toast.error(result.error.message);
-          return;
-        }
-
-        toast.success('Barang masuk berhasil dibatalkan.');
-        router.refresh();
-      });
-    },
-    [router, startTransition],
+    (receivingId: string) => voidReceivingAction({ receiving_id: receivingId }),
+    [],
   );
+
+  const handleMutationSuccess = React.useCallback(() => {
+    startTransition(() => {
+      router.refresh();
+    });
+  }, [router, startTransition]);
+
+  const isLoading = isPending;
 
   const columns = React.useMemo(
     () =>
       buildColumns({
         can_write,
-        is_pending: isPending,
+        is_pending: isLoading,
         on_post: handlePostReceiving,
         on_void: handleVoidReceiving,
+        on_mutation_success: handleMutationSuccess,
       }),
-    [can_write, handlePostReceiving, handleVoidReceiving, isPending],
+    [
+      can_write,
+      handleMutationSuccess,
+      handlePostReceiving,
+      handleVoidReceiving,
+      isLoading,
+    ],
   );
 
   const emptyDescription = can_write
@@ -208,7 +210,7 @@ export function ReceivingsPanel({
       columns={columns}
       data={receivings}
       enableToolbar={false}
-      isLoading={isPending}
+      isLoading={isLoading}
       loadingText="Memproses data barang masuk..."
       emptyTitle="Belum ada data barang masuk"
       emptyDescription={emptyDescription}

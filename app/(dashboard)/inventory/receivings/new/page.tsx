@@ -1,6 +1,6 @@
 import { EmptyState } from '@/components/ui/empty-state';
 
-import { fetchInventoryVariantOptions } from '../../fetcher';
+import { fetchInventoryProductOptions } from '../../fetcher';
 import { requireInventoryWriteContext } from '../../guards';
 import { CreateReceivingForm } from '../create-receiving-form';
 
@@ -16,14 +16,14 @@ export default async function NewReceivingPage() {
     );
   }
 
-  const variantOptionsResult = await fetchInventoryVariantOptions(
+  const productOptionsResult = await fetchInventoryProductOptions(
     writeContext.data.session,
   );
-  if (!variantOptionsResult.ok) {
+  if (!productOptionsResult.ok) {
     return (
       <EmptyState
         title="Buat Barang Masuk"
-        description={variantOptionsResult.error.message}
+        description={productOptionsResult.error.message}
       />
     );
   }
@@ -31,14 +31,16 @@ export default async function NewReceivingPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Buat Barang Masuk</h1>
+        <h1 className="text-xl font-semibold tracking-tight">
+          Buat Barang Masuk
+        </h1>
         <p className="text-muted-foreground text-sm">
           Buat dokumen penerimaan dengan banyak item, lalu simpan sebagai draf
           atau langsung posting.
         </p>
       </div>
 
-      <CreateReceivingForm variant_options={variantOptionsResult.data} />
+      <CreateReceivingForm product_options={productOptionsResult.data} />
     </div>
   );
 }

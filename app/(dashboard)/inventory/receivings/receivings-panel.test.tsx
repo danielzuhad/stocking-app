@@ -51,12 +51,15 @@ describe('ReceivingsPanel', () => {
     });
   });
 
-  it('shows row actions for draft rows and posts receiving', async () => {
+  it('asks confirmation before posting receiving', async () => {
     const user = userEvent.setup();
 
     render(<ReceivingsPanel can_write receivings={RECEIVING_ROWS} />);
 
     await user.click(screen.getByRole('button', { name: 'Posting' }));
+    expect(postReceivingActionMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Ya, posting' }));
 
     await waitFor(() => {
       expect(postReceivingActionMock).toHaveBeenCalledTimes(1);
@@ -68,6 +71,30 @@ describe('ReceivingsPanel', () => {
     expect(toast.success).toHaveBeenCalledWith(
       'Barang masuk berhasil diposting.',
     );
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it('asks confirmation before voiding receiving', async () => {
+    const user = userEvent.setup();
+
+    render(<ReceivingsPanel can_write receivings={RECEIVING_ROWS} />);
+
+    await user.click(screen.getByRole('button', { name: 'Batalkan' }));
+    expect(voidReceivingActionMock).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Ya, batalkan' }));
+
+    await waitFor(() => {
+      expect(voidReceivingActionMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(voidReceivingActionMock).toHaveBeenCalledWith({
+      receiving_id: 'receiving-1',
+    });
+    expect(toast.success).toHaveBeenCalledWith(
+      'Barang masuk berhasil dibatalkan.',
+    );
+    expect(refreshMock).toHaveBeenCalled();
   });
 
   it('hides row write controls for read-only users', () => {

@@ -4,6 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { NumberInput } from './number-input';
 
 describe('NumberInput', () => {
+  it('renders empty input when value is undefined', () => {
+    render(<NumberInput value={undefined} />);
+
+    expect(screen.getByRole('textbox')).toHaveValue('');
+  });
+
   it('renders left and right attachments with formatted value', () => {
     render(
       <NumberInput

@@ -39,6 +39,7 @@ import {
 import { createDataTableQueryWithSearchSchema } from '@/lib/table/types';
 import type {
   ActiveStockOpnameType,
+  InventoryProductOptionType,
   InventoryStockRowType,
   InventoryVariantOptionType,
   ReceivingRowType,
@@ -52,7 +53,9 @@ const DEFAULT_ORDER_BY = [desc(productVariants.updated_at)] as const;
 const INVENTORY_STOCK_QUERY_SCHEMA = createDataTableQueryWithSearchSchema();
 
 /** Query type is derived from schema to avoid type/schema drift. */
-type InventoryStockTableQueryType = z.infer<typeof INVENTORY_STOCK_QUERY_SCHEMA>;
+type InventoryStockTableQueryType = z.infer<
+  typeof INVENTORY_STOCK_QUERY_SCHEMA
+>;
 
 /** Searchable columns map (field key -> SQL expression). */
 const INVENTORY_STOCK_SEARCH_MAP = {
@@ -185,7 +188,9 @@ async function getInventoryStockRowCount(
 /**
  * Converts DB row shape into serializable UI/API shape.
  */
-function serializeInventoryStockRow(row: InventoryStockDbRowType): InventoryStockRowType {
+function serializeInventoryStockRow(
+  row: InventoryStockDbRowType,
+): InventoryStockRowType {
   return {
     product_variant_id: row.product_variant_id,
     product_id: row.product_id,
@@ -210,7 +215,9 @@ export async function fetchInventoryStockTable(
   session?: Session,
   options?: FetchInventoryStockOptionsType,
 ): Promise<ActionResult<TableResponse<InventoryStockRowType>>> {
-  const searchFields = inventoryStockSearch.resolveFields(options?.search_fields);
+  const searchFields = inventoryStockSearch.resolveFields(
+    options?.search_fields,
+  );
   const rowCountMode = options?.row_count_mode ?? 'exact';
 
   return fetchTable({
@@ -228,7 +235,10 @@ export async function fetchInventoryStockTable(
           isNull(productVariants.deleted_at),
           isNull(products.deleted_at),
         );
-        const searchWhere = inventoryStockSearch.buildWhere(query.q, searchFields);
+        const searchWhere = inventoryStockSearch.buildWhere(
+          query.q,
+          searchFields,
+        );
 
         if (!searchWhere) return companyWhere;
         return and(companyWhere, searchWhere);
@@ -275,6 +285,41 @@ export async function fetchInventoryVariantOptions(
       ),
     )
     .orderBy(products.name, productVariants.name);
+
+  return ok(rows);
+}
+
+/**
+ * Fetches active product options for receiving form product selector.
+ *
+ * This query does not preload variants to keep payload small on initial page load.
+ */
+export async function fetchInventoryProductOptions(
+  session?: Session,
+): Promise<ActionResult<InventoryProductOptionType[]>> {
+  const scopeResult = session
+    ? resolveActiveCompanyScopeFromSession(session)
+    : await requireActiveCompanyScope();
+
+  if (!scopeResult.ok) return scopeResult;
+
+  const rows = await db
+    .select({
+      product_id: products.id,
+      product_label: products.name,
+    })
+    .from(products)
+    .innerJoin(productVariants, eq(productVariants.product_id, products.id))
+    .where(
+      and(
+        eq(products.company_id, scopeResult.data.company_id),
+        eq(productVariants.company_id, scopeResult.data.company_id),
+        isNull(products.deleted_at),
+        isNull(productVariants.deleted_at),
+      ),
+    )
+    .groupBy(products.id, products.name)
+    .orderBy(products.name);
 
   return ok(rows);
 }

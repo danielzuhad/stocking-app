@@ -60,7 +60,7 @@ export const createReceivingFormSchema = z.object({
         product_variant_id: z.string().uuid('Varian produk wajib dipilih.'),
         qty: z
           .number()
-          .positive('Qty penerimaan harus lebih dari 0.')
+          .positive('Qty  harus lebih dari 0.')
           .max(999999999999.99, 'Qty terlalu besar.'),
         note: optionalTrimmedText(300),
       }),
@@ -72,6 +72,11 @@ export const createReceivingFormSchema = z.object({
 /** Validation schema for receiving lifecycle actions (`POSTED` / `VOID`). */
 export const receivingLifecycleSchema = z.object({
   receiving_id: z.string().uuid(),
+});
+
+/** Validation schema for reading variants by selected product in receiving form. */
+export const fetchReceivingVariantsByProductSchema = z.object({
+  product_id: z.string().uuid('Produk wajib dipilih.'),
 });
 
 /** Item input schema for stock adjustment creation. */
@@ -128,8 +133,13 @@ export type CreateReceivingDraftInputType = z.infer<
 export type CreateReceivingDraftFormInputType = z.infer<
   typeof createReceivingDraftFormSchema
 >;
-export type CreateReceivingFormInputType = z.infer<typeof createReceivingFormSchema>;
+export type CreateReceivingFormInputType = z.infer<
+  typeof createReceivingFormSchema
+>;
 export type CreateStockAdjustmentInputType = z.infer<
   typeof createStockAdjustmentSchema
+>;
+export type FetchReceivingVariantsByProductInputType = z.infer<
+  typeof fetchReceivingVariantsByProductSchema
 >;
 export type StartStockOpnameInputType = z.infer<typeof startStockOpnameSchema>;

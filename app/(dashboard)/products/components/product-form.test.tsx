@@ -91,12 +91,16 @@ describe('ProductForm', () => {
   it('renders create mode with locked category and one starter variant row', () => {
     render(<ProductForm mode="create" />);
     const categoryInput = screen.getByRole('combobox', { name: 'Kategori' });
+    const sellingPriceInput = screen.getByRole('textbox', { name: 'Harga jual' });
+    const openingStockInput = screen.getByRole('textbox', { name: 'Stok awal' });
 
     expect(screen.getByLabelText('Nama produk')).toBeInTheDocument();
     expect(categoryInput).toBeDisabled();
     expect(categoryInput).toHaveTextContent('Umum');
     expect(screen.getByText('Varian 1')).toBeInTheDocument();
     expect(screen.queryByText('Varian 2')).not.toBeInTheDocument();
+    expect(sellingPriceInput).toHaveValue('');
+    expect(openingStockInput).toHaveValue('');
   });
 
   it('allows adding a new variant row', async () => {

@@ -1,13 +1,7 @@
 'use server';
 
-import {
-  and,
-  eq,
-  inArray,
-  isNull,
-  sql,
-} from 'drizzle-orm';
-import { revalidatePath } from 'next/cache';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { revalidatePath, updateTag } from 'next/cache';
 
 import { db } from '@/db';
 import {
@@ -23,6 +17,7 @@ import {
 } from '@/db/schema';
 import { err, errFromZod, ok, type ActionResult } from '@/lib/actions/result';
 import { logActivity } from '@/lib/audit';
+import { SYSTEM_LOGS_CACHE_TAG } from '@/lib/fetchers/cache-tags';
 import {
   RECEIVING_STATUS_DRAFT,
   RECEIVING_STATUS_POSTED,
@@ -47,16 +42,28 @@ import { toFixedScaleNumberText, toNullableTrimmedText } from '@/lib/utils';
 import {
   createReceivingDraftSchema,
   createStockAdjustmentSchema,
+  fetchReceivingVariantsByProductSchema,
   finalizeStockOpnameSchema,
   receivingLifecycleSchema,
   startStockOpnameSchema,
   updateStockOpnameItemSchema,
   voidStockOpnameSchema,
 } from '@/lib/validation/inventory';
+import type { InventoryVariantOptionType } from '@/types';
 
 import { requireInventoryWriteContext } from './guards';
 
 const INVENTORY_PATH = '/inventory';
+const ACTIVITY_LOGS_PATH = '/activity-logs';
+
+/**
+ * Refreshes inventory views and audit-log views after successful mutations.
+ */
+function revalidateInventoryMutationViews(): void {
+  revalidatePath(INVENTORY_PATH);
+  revalidatePath(ACTIVITY_LOGS_PATH);
+  updateTag(SYSTEM_LOGS_CACHE_TAG);
+}
 
 type DbSelectClientType = Pick<typeof db, 'select'>;
 
@@ -110,7 +117,11 @@ function normalizeReceivingItems(
  */
 function normalizeStockAdjustmentItems(
   items: Array<{ product_variant_id: string; qty_diff: number; note?: string }>,
-): Array<{ product_variant_id: string; qty_diff: number; note: string | null }> {
+): Array<{
+  product_variant_id: string;
+  qty_diff: number;
+  note: string | null;
+}> {
   const merged = new Map<string, { qty_diff: number; note: string | null }>();
 
   for (const item of items) {
@@ -243,7 +254,10 @@ async function getActiveStockOpnameId(
 async function ensureNoActiveStockOpname(input: {
   company_id: string;
 }): Promise<ActionResult<{ ok: true }>> {
-  const activeStockOpnameId = await getActiveStockOpnameId(db, input.company_id);
+  const activeStockOpnameId = await getActiveStockOpnameId(
+    db,
+    input.company_id,
+  );
   if (activeStockOpnameId) {
     return err(
       'CONFLICT',
@@ -279,6 +293,62 @@ async function ensureNoNegativeStockAfterDiffs(input: {
   }
 
   return ok({ ok: true });
+}
+
+/**
+ * Reads active variants for a selected product in receiving form.
+ *
+ * Permission:
+ * - `ADMIN` and `SUPERADMIN` only.
+ *
+ * Tenant scope:
+ * - product and variants must belong to `activeCompanyId`.
+ */
+export async function fetchReceivingVariantOptionsByProductAction(
+  input: unknown,
+): Promise<ActionResult<InventoryVariantOptionType[]>> {
+  const contextResult = await requireInventoryWriteContext();
+  if (!contextResult.ok) return contextResult;
+  const { company_id } = contextResult.data;
+
+  const parsed = fetchReceivingVariantsByProductSchema.safeParse(input);
+  if (!parsed.success) return errFromZod(parsed.error);
+
+  try {
+    const rows = await db
+      .select({
+        product_id: products.id,
+        product_variant_id: productVariants.id,
+        product_label: products.name,
+        variant_label: productVariants.name,
+        sku: productVariants.sku,
+        barcode: productVariants.barcode,
+      })
+      .from(productVariants)
+      .innerJoin(products, eq(products.id, productVariants.product_id))
+      .where(
+        and(
+          eq(products.id, parsed.data.product_id),
+          eq(productVariants.company_id, company_id),
+          eq(products.company_id, company_id),
+          isNull(productVariants.deleted_at),
+          isNull(products.deleted_at),
+        ),
+      )
+      .orderBy(productVariants.name);
+
+    return ok(rows);
+  } catch (error) {
+    const presentation = getErrorPresentation({ error });
+    console.error(
+      'INVENTORY_RECEIVING_VARIANT_OPTIONS_BY_PRODUCT_FETCH_ERROR',
+      presentation.developer,
+    );
+    return err(
+      'INTERNAL',
+      'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+    );
+  }
 }
 
 /**
@@ -326,7 +396,10 @@ export async function createReceivingDraftAction(
   try {
     const created = await db.transaction(async (tx) => {
       const now = new Date();
-      const totalQty = normalizedItems.reduce((total, item) => total + item.qty, 0);
+      const totalQty = normalizedItems.reduce(
+        (total, item) => total + item.qty,
+        0,
+      );
 
       const [createdReceiving] = await tx
         .insert(receivings)
@@ -399,12 +472,15 @@ export async function createReceivingDraftAction(
       return createdReceiving!;
     });
 
-    revalidatePath(INVENTORY_PATH);
+    revalidateInventoryMutationViews();
     return ok({ receiving_id: created.id, status: created.status });
   } catch (error) {
     const presentation = getErrorPresentation({ error });
     console.error('INVENTORY_RECEIVING_CREATE_ERROR', presentation.developer);
-    return err('INTERNAL', 'Sedang ada gangguan sistem. Coba lagi beberapa saat.');
+    return err(
+      'INTERNAL',
+      'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+    );
   }
 }
 
@@ -517,7 +593,10 @@ export async function postReceivingAction(
         target_id: postedReceiving.id,
         meta: {
           item_count: items.length,
-          total_qty: items.reduce((total, item) => total + toNumber(item.qty), 0),
+          total_qty: items.reduce(
+            (total, item) => total + toNumber(item.qty),
+            0,
+          ),
         },
       });
 
@@ -526,7 +605,7 @@ export async function postReceivingAction(
 
     if (!posted) return err('NOT_FOUND', 'Penerimaan tidak ditemukan.');
 
-    revalidatePath(INVENTORY_PATH);
+    revalidateInventoryMutationViews();
     return ok({ receiving_id: posted.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -546,7 +625,10 @@ export async function postReceivingAction(
 
     const presentation = getErrorPresentation({ error });
     console.error('INVENTORY_RECEIVING_POST_ERROR', presentation.developer);
-    return err('INTERNAL', 'Sedang ada gangguan sistem. Coba lagi beberapa saat.');
+    return err(
+      'INTERNAL',
+      'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+    );
   }
 }
 
@@ -619,13 +701,16 @@ export async function voidReceivingAction(
 
     if (!voided) return err('NOT_FOUND', 'Penerimaan tidak ditemukan.');
 
-    revalidatePath(INVENTORY_PATH);
+    revalidateInventoryMutationViews();
     return ok({ receiving_id: voided.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
     if (message === 'RECEIVING_ALREADY_POSTED') {
-      return err('CONFLICT', 'Penerimaan sudah diposting dan tidak bisa dibatalkan.');
+      return err(
+        'CONFLICT',
+        'Penerimaan sudah diposting dan tidak bisa dibatalkan.',
+      );
     }
     if (message === 'RECEIVING_ALREADY_VOID') {
       return err('CONFLICT', 'Penerimaan sudah dibatalkan sebelumnya.');
@@ -636,7 +721,10 @@ export async function voidReceivingAction(
 
     const presentation = getErrorPresentation({ error });
     console.error('INVENTORY_RECEIVING_VOID_ERROR', presentation.developer);
-    return err('INTERNAL', 'Sedang ada gangguan sistem. Coba lagi beberapa saat.');
+    return err(
+      'INTERNAL',
+      'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+    );
   }
 }
 
@@ -744,12 +832,15 @@ export async function createStockAdjustmentAction(
       return createdAdjustment!;
     });
 
-    revalidatePath(INVENTORY_PATH);
+    revalidateInventoryMutationViews();
     return ok({ stock_adjustment_id: created.id });
   } catch (error) {
     const presentation = getErrorPresentation({ error });
     console.error('INVENTORY_ADJUSTMENT_CREATE_ERROR', presentation.developer);
-    return err('INTERNAL', 'Sedang ada gangguan sistem. Coba lagi beberapa saat.');
+    return err(
+      'INTERNAL',
+      'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+    );
   }
 }
 
@@ -827,7 +918,9 @@ export async function startStockOpnameAction(
       });
       const balances = await getCurrentStockByVariantIds(tx, {
         company_id,
-        product_variant_ids: variants.map((variant) => variant.product_variant_id),
+        product_variant_ids: variants.map(
+          (variant) => variant.product_variant_id,
+        ),
       });
 
       if (variants.length > 0) {
@@ -863,7 +956,7 @@ export async function startStockOpnameAction(
       return createdOpname!;
     });
 
-    revalidatePath(INVENTORY_PATH);
+    revalidateInventoryMutationViews();
     return ok({ stock_opname_id: created.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -876,7 +969,10 @@ export async function startStockOpnameAction(
 
     const presentation = getErrorPresentation({ error });
     console.error('INVENTORY_OPNAME_START_ERROR', presentation.developer);
-    return err('INTERNAL', 'Sedang ada gangguan sistem. Coba lagi beberapa saat.');
+    return err(
+      'INTERNAL',
+      'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+    );
   }
 }
 
@@ -947,7 +1043,7 @@ export async function updateStockOpnameItemCountedQtyAction(
       return updatedItem;
     });
 
-    revalidatePath(INVENTORY_PATH);
+    revalidateInventoryMutationViews();
     return ok({ stock_opname_item_id: updated.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -964,7 +1060,10 @@ export async function updateStockOpnameItemCountedQtyAction(
 
     const presentation = getErrorPresentation({ error });
     console.error('INVENTORY_OPNAME_ITEM_UPDATE_ERROR', presentation.developer);
-    return err('INTERNAL', 'Sedang ada gangguan sistem. Coba lagi beberapa saat.');
+    return err(
+      'INTERNAL',
+      'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+    );
   }
 }
 
@@ -1042,7 +1141,9 @@ export async function finalizeStockOpnameAction(
         qtyDiffsByVariant,
       });
       if (!noNegativeStockResult.ok) {
-        throw new Error(`NEGATIVE_STOCK:${noNegativeStockResult.error.message}`);
+        throw new Error(
+          `NEGATIVE_STOCK:${noNegativeStockResult.error.message}`,
+        );
       }
 
       const now = new Date();
@@ -1114,7 +1215,7 @@ export async function finalizeStockOpnameAction(
       return updatedOpname;
     });
 
-    revalidatePath(INVENTORY_PATH);
+    revalidateInventoryMutationViews();
     return ok({ stock_opname_id: finalized.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1131,7 +1232,10 @@ export async function finalizeStockOpnameAction(
 
     const presentation = getErrorPresentation({ error });
     console.error('INVENTORY_OPNAME_FINALIZE_ERROR', presentation.developer);
-    return err('INTERNAL', 'Sedang ada gangguan sistem. Coba lagi beberapa saat.');
+    return err(
+      'INTERNAL',
+      'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+    );
   }
 }
 
@@ -1204,7 +1308,7 @@ export async function voidStockOpnameAction(
 
     if (!voided) return err('NOT_FOUND', 'Stok opname tidak ditemukan.');
 
-    revalidatePath(INVENTORY_PATH);
+    revalidateInventoryMutationViews();
     return ok({ stock_opname_id: voided.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1221,6 +1325,9 @@ export async function voidStockOpnameAction(
 
     const presentation = getErrorPresentation({ error });
     console.error('INVENTORY_OPNAME_VOID_ERROR', presentation.developer);
-    return err('INTERNAL', 'Sedang ada gangguan sistem. Coba lagi beberapa saat.');
+    return err(
+      'INTERNAL',
+      'Sedang ada gangguan sistem. Coba lagi beberapa saat.',
+    );
   }
 }

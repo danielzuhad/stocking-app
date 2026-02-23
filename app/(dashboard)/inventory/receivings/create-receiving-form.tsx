@@ -5,7 +5,12 @@ import { Trash2Icon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
-import { useFieldArray, useForm, useWatch } from 'react-hook-form';
+import {
+  useFieldArray,
+  useForm,
+  useWatch,
+  type UseFormReturn,
+} from 'react-hook-form';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -44,16 +49,18 @@ import {
   createReceivingFormSchema,
   type CreateReceivingFormInputType,
 } from '@/lib/validation/inventory';
-import type { InventoryVariantOptionType } from '@/types';
+import type {
+  InventoryProductOptionType,
+  InventoryVariantOptionType,
+} from '@/types';
 
-import { createReceivingDraftAction } from '../actions';
-
-type InventoryProductOptionType = {
-  product_id: string;
-  product_label: string;
-};
+import {
+  createReceivingDraftAction,
+  fetchReceivingVariantOptionsByProductAction,
+} from '../actions';
 
 type ReceivingFormItemType = CreateReceivingFormInputType['items'][number];
+type VariantOptionsByProductType = Record<string, InventoryVariantOptionType[]>;
 
 function buildVariantLabel(option: InventoryVariantOptionType): string {
   const codes = [option.sku, option.barcode].filter(Boolean).join(' • ');
@@ -66,117 +73,293 @@ function buildVariantLabel(option: InventoryVariantOptionType): string {
   return `${variantPart} (${codes})`;
 }
 
-function buildProductOptions(
-  variantOptions: InventoryVariantOptionType[],
-): InventoryProductOptionType[] {
-  const map = new Map<string, string>();
-  for (const option of variantOptions) {
-    if (map.has(option.product_id)) continue;
-    map.set(option.product_id, option.product_label);
-  }
-
-  return Array.from(map.entries()).map(([product_id, product_label]) => ({
-    product_id,
-    product_label,
-  }));
-}
-
-function buildVariantOptionsByProduct(
-  variantOptions: InventoryVariantOptionType[],
-): Map<string, InventoryVariantOptionType[]> {
-  const map = new Map<string, InventoryVariantOptionType[]>();
-
-  for (const option of variantOptions) {
-    const current = map.get(option.product_id);
-    if (!current) {
-      map.set(option.product_id, [option]);
-      continue;
-    }
-
-    current.push(option);
-  }
-
-  return map;
-}
-
 /**
- * Resolves variant selection to stay valid for selected product.
+ * Keeps variant selection only if it still belongs to selected product.
  *
- * If current variant does not belong to the selected product, fallback to
- * the first available variant for that product.
+ * If current variant does not belong to selected product, keep it empty so
+ * user must choose variant explicitly.
  */
 export function resolveReceivingVariantSelection(input: {
-  product_id: string;
   current_variant_id: string;
-  variant_options_by_product: Map<string, InventoryVariantOptionType[]>;
+  variants: InventoryVariantOptionType[];
 }): string {
-  const variants = input.variant_options_by_product.get(input.product_id) ?? [];
-  const hasCurrentVariant = variants.some(
+  const hasCurrentVariant = input.variants.some(
     (variant) => variant.product_variant_id === input.current_variant_id,
   );
 
   if (hasCurrentVariant) return input.current_variant_id;
-  return variants[0]?.product_variant_id ?? '';
+  return '';
 }
 
-function createDefaultReceivingItem(
-  productOptions: InventoryProductOptionType[],
-  variantOptionsByProduct: Map<string, InventoryVariantOptionType[]>,
-): ReceivingFormItemType {
-  const firstProductId = productOptions[0]?.product_id ?? '';
-  const firstVariantId =
-    variantOptionsByProduct.get(firstProductId)?.[0]?.product_variant_id ?? '';
+/**
+ * Ensures product + variant pair stays valid against available catalog.
+ */
+function sanitizeReceivingItemSelection(input: {
+  item: ReceivingFormItemType;
+  available_product_ids: Set<string>;
+  variant_options_by_product: VariantOptionsByProductType;
+}): Pick<ReceivingFormItemType, 'product_id' | 'product_variant_id'> {
+  if (!input.item.product_id) {
+    return {
+      product_id: '',
+      product_variant_id: '',
+    };
+  }
+
+  if (!input.available_product_ids.has(input.item.product_id)) {
+    return {
+      product_id: '',
+      product_variant_id: '',
+    };
+  }
+
+  const availableVariants =
+    input.variant_options_by_product[input.item.product_id] ?? [];
 
   return {
-    product_id: firstProductId,
-    product_variant_id: firstVariantId,
-    qty: 1,
+    product_id: input.item.product_id,
+    product_variant_id: resolveReceivingVariantSelection({
+      current_variant_id: input.item.product_variant_id,
+      variants: availableVariants,
+    }),
+  };
+}
+
+function createDefaultReceivingItem(): ReceivingFormItemType {
+  return {
+    product_id: '',
+    product_variant_id: '',
+    qty: 0,
     note: '',
   };
 }
 
+type ReceivingItemRowPropsType = {
+  index: number;
+  form: UseFormReturn<CreateReceivingFormInputType>;
+  product_options: InventoryProductOptionType[];
+  variant_options_by_product: VariantOptionsByProductType;
+  loading_variants_by_product: Record<string, boolean>;
+  is_submitting: boolean;
+  can_remove: boolean;
+  on_remove: (index: number) => void;
+  on_product_change: (input: {
+    index: number;
+    next_product_id: string;
+  }) => void;
+};
+
+function ReceivingItemRow({
+  index,
+  form,
+  product_options,
+  variant_options_by_product,
+  loading_variants_by_product,
+  is_submitting,
+  can_remove,
+  on_remove,
+  on_product_change,
+}: ReceivingItemRowPropsType) {
+  const selectedProductId =
+    useWatch({
+      control: form.control,
+      name: `items.${index}.product_id`,
+    }) ?? '';
+  const availableVariants = variant_options_by_product[selectedProductId] ?? [];
+  const isVariantLoading = Boolean(
+    selectedProductId && loading_variants_by_product[selectedProductId],
+  );
+
+  return (
+    <Card className="gap-3 py-4">
+      <CardHeader className="px-4 pb-0">
+        <CardTitle className="text-sm">Item {index + 1}</CardTitle>
+        <CardAction>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => on_remove(index)}
+            disabled={is_submitting || !can_remove}
+            aria-label={`Hapus item ${index + 1}`}
+            className="text-destructive hover:text-destructive border"
+          >
+            <Trash2Icon className="size-4" />
+          </Button>
+        </CardAction>
+      </CardHeader>
+
+      <CardContent className="space-y-3 px-4">
+        <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px]">
+          <FormField
+            control={form.control}
+            name={`items.${index}.product_id`}
+            render={({ field: productField }) => (
+              <FormItem>
+                <FormLabel>Produk</FormLabel>
+                <Select
+                  value={productField.value}
+                  onValueChange={(nextProductId) => {
+                    productField.onChange(nextProductId);
+                    on_product_change({
+                      index,
+                      next_product_id: nextProductId,
+                    });
+                  }}
+                  disabled={is_submitting || product_options.length === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih produk" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {product_options.map((option) => (
+                      <SelectItem
+                        key={option.product_id}
+                        value={option.product_id}
+                      >
+                        {option.product_label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name={`items.${index}.product_variant_id`}
+            render={({ field: variantField }) => (
+              <FormItem>
+                <FormLabel>Varian</FormLabel>
+                <Select
+                  value={variantField.value}
+                  onValueChange={variantField.onChange}
+                  disabled={
+                    is_submitting ||
+                    !selectedProductId ||
+                    isVariantLoading ||
+                    availableVariants.length === 0
+                  }
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          isVariantLoading ? 'Memuat varian...' : 'Pilih varian'
+                        }
+                      />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {availableVariants.map((option) => (
+                      <SelectItem
+                        key={option.product_variant_id}
+                        value={option.product_variant_id}
+                      >
+                        {buildVariantLabel(option)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name={`items.${index}.qty`}
+            render={({ field: qtyField }) => (
+              <FormItem>
+                <FormLabel>Qty</FormLabel>
+                <FormControl>
+                  <NumberInput
+                    value={qtyField.value === 0 ? undefined : qtyField.value}
+                    placeholder="0"
+                    onBlur={qtyField.onBlur}
+                    onValueChange={qtyField.onChange}
+                    decimalScale={2}
+                    allowNegative={false}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name={`items.${index}.note`}
+          render={({ field: noteField }) => (
+            <FormItem>
+              <FormLabel>Catatan Item (opsional)</FormLabel>
+              <FormControl>
+                <Input
+                  value={noteField.value ?? ''}
+                  onChange={noteField.onChange}
+                  placeholder="Catatan item"
+                  disabled={is_submitting}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Multi-item receiving form (supports `DRAFT` and direct `POSTED`). */
 export function CreateReceivingForm({
-  variant_options,
+  product_options,
 }: {
-  variant_options: InventoryVariantOptionType[];
+  product_options: InventoryProductOptionType[];
 }) {
   const router = useRouter();
-  const productOptions = React.useMemo(
-    () => buildProductOptions(variant_options),
-    [variant_options],
-  );
-  const variantOptionsByProduct = React.useMemo(
-    () => buildVariantOptionsByProduct(variant_options),
-    [variant_options],
-  );
-  const defaultItem = React.useMemo(
-    () => createDefaultReceivingItem(productOptions, variantOptionsByProduct),
-    [productOptions, variantOptionsByProduct],
-  );
+  const defaultItem = React.useMemo(() => createDefaultReceivingItem(), []);
 
   const form = useForm<CreateReceivingFormInputType>({
     resolver: zodResolver(createReceivingFormSchema),
     defaultValues: {
-      status: RECEIVING_STATUS_DRAFT,
+      status: RECEIVING_STATUS_POSTED,
       note: '',
       items: [defaultItem],
     },
   });
+
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: 'items',
   });
+
+  const [variantOptionsByProduct, setVariantOptionsByProduct] =
+    React.useState<VariantOptionsByProductType>({});
+  const [loadingVariantsByProduct, setLoadingVariantsByProduct] =
+    React.useState<Record<string, boolean>>({});
+  const variantOptionsByProductRef = React.useRef(variantOptionsByProduct);
+  const loadingVariantRequestsRef = React.useRef(new Set<string>());
+
+  React.useEffect(() => {
+    variantOptionsByProductRef.current = variantOptionsByProduct;
+  }, [variantOptionsByProduct]);
 
   const selectedStatus =
     useWatch({ control: form.control, name: 'status' }) ??
     RECEIVING_STATUS_DRAFT;
   const watchedItems = useWatch({ control: form.control, name: 'items' }) ?? [];
   const isSubmitting = form.formState.isSubmitting;
+
   const totalQty = watchedItems.reduce(
     (total, item) => total + Number(item?.qty ?? 0),
     0,
   );
+
   const submitLabel =
     selectedStatus === RECEIVING_STATUS_POSTED
       ? 'Simpan & Posting'
@@ -186,6 +369,66 @@ export function CreateReceivingForm({
       ? 'Menyimpan dan posting...'
       : 'Menyimpan draf...';
 
+  const availableProductIds = React.useMemo(
+    () => new Set(product_options.map((product) => product.product_id)),
+    [product_options],
+  );
+
+  const setVariantLoadingState = React.useCallback(
+    (product_id: string, is_loading: boolean) => {
+      setLoadingVariantsByProduct((current) => {
+        if (is_loading) {
+          if (current[product_id]) return current;
+          return {
+            ...current,
+            [product_id]: true,
+          };
+        }
+
+        if (!current[product_id]) return current;
+        const { [product_id]: _removed, ...next } = current;
+        return next;
+      });
+    },
+    [],
+  );
+
+  const ensureVariantsLoaded = React.useCallback(
+    async (product_id: string) => {
+      if (!product_id) return;
+      if (variantOptionsByProductRef.current[product_id]) return;
+      if (loadingVariantRequestsRef.current.has(product_id)) return;
+
+      loadingVariantRequestsRef.current.add(product_id);
+      setVariantLoadingState(product_id, true);
+
+      try {
+        const result = await fetchReceivingVariantOptionsByProductAction({
+          product_id,
+        });
+        if (!result.ok) {
+          toast.error(result.error.message);
+          return;
+        }
+
+        setVariantOptionsByProduct((current) => {
+          if (current[product_id]) return current;
+
+          const next = {
+            ...current,
+            [product_id]: result.data,
+          };
+          variantOptionsByProductRef.current = next;
+          return next;
+        });
+      } finally {
+        loadingVariantRequestsRef.current.delete(product_id);
+        setVariantLoadingState(product_id, false);
+      }
+    },
+    [setVariantLoadingState],
+  );
+
   React.useEffect(() => {
     if (fields.length > 0) return;
     append(defaultItem);
@@ -193,43 +436,62 @@ export function CreateReceivingForm({
 
   React.useEffect(() => {
     const currentItems = form.getValues('items');
+
     currentItems.forEach((item, index) => {
-      if (productOptions.length === 0) {
-        form.setValue(`items.${index}.product_id`, '');
-        form.setValue(`items.${index}.product_variant_id`, '');
-        return;
-      }
-
-      const hasProduct = productOptions.some(
-        (product) => product.product_id === item.product_id,
-      );
-      const nextProductId = hasProduct
-        ? item.product_id
-        : productOptions[0]!.product_id;
-
-      if (!hasProduct) {
-        form.setValue(`items.${index}.product_id`, nextProductId);
-      }
-
-      const nextVariantId = resolveReceivingVariantSelection({
-        product_id: nextProductId,
-        current_variant_id: item.product_variant_id,
+      const sanitized = sanitizeReceivingItemSelection({
+        item,
+        available_product_ids: availableProductIds,
         variant_options_by_product: variantOptionsByProduct,
       });
-      if (nextVariantId === item.product_variant_id) return;
 
-      form.setValue(`items.${index}.product_variant_id`, nextVariantId);
+      if (sanitized.product_id !== item.product_id) {
+        form.setValue(`items.${index}.product_id`, sanitized.product_id);
+      }
+
+      if (sanitized.product_variant_id !== item.product_variant_id) {
+        form.setValue(
+          `items.${index}.product_variant_id`,
+          sanitized.product_variant_id,
+        );
+      }
     });
-  }, [form, productOptions, variantOptionsByProduct]);
+  }, [availableProductIds, form, variantOptionsByProduct]);
 
-  const handleAddItem = () => {
-    if (productOptions.length === 0) {
+  const handleAddItem = React.useCallback(() => {
+    if (product_options.length === 0) {
       toast.error('Belum ada produk aktif yang bisa dipilih.');
       return;
     }
 
-    append(createDefaultReceivingItem(productOptions, variantOptionsByProduct));
-  };
+    append(createDefaultReceivingItem());
+  }, [append, product_options.length]);
+
+  const handleProductChange = React.useCallback(
+    (input: { index: number; next_product_id: string }) => {
+      const currentItem =
+        form.getValues(`items.${input.index}`) ?? createDefaultReceivingItem();
+      const sanitized = sanitizeReceivingItemSelection({
+        item: {
+          ...currentItem,
+          product_id: input.next_product_id,
+          product_variant_id: '',
+        },
+        available_product_ids: availableProductIds,
+        variant_options_by_product: variantOptionsByProductRef.current,
+      });
+
+      form.setValue(
+        `items.${input.index}.product_variant_id`,
+        sanitized.product_variant_id,
+        { shouldValidate: false },
+      );
+      form.clearErrors(`items.${input.index}.product_variant_id`);
+
+      if (sanitized.product_variant_id) return;
+      void ensureVariantsLoaded(input.next_product_id);
+    },
+    [availableProductIds, ensureVariantsLoaded, form],
+  );
 
   const onSubmit = async (values: CreateReceivingFormInputType) => {
     const result = await createReceivingDraftAction({
@@ -267,167 +529,22 @@ export function CreateReceivingForm({
         <Card className="gap-2">
           <CardHeader>
             <CardTitle className="text-base">Item Penerimaan</CardTitle>
-            {/* <CardDescription>
-              Pilih produk lalu varian. Varian akan menyesuaikan produk yang
-              dipilih.
-            </CardDescription> */}
           </CardHeader>
           <CardContent className="space-y-4">
             {fields.map((field, index) => {
-              const selectedProductId = watchedItems[index]?.product_id ?? '';
-              const availableVariants =
-                variantOptionsByProduct.get(selectedProductId) ?? [];
-
               return (
-                <Card key={field.id} className="gap-3 py-4">
-                  <CardHeader className="px-4 pb-0">
-                    <CardTitle className="text-sm">Item {index + 1}</CardTitle>
-                    <CardAction>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => remove(index)}
-                        disabled={isSubmitting || fields.length === 1}
-                        aria-label={`Hapus item ${index + 1}`}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2Icon className="size-4" />
-                      </Button>
-                    </CardAction>
-                  </CardHeader>
-
-                  <CardContent className="space-y-3 px-4">
-                    <div className="grid gap-3 md:grid-cols-[1fr_1fr_180px]">
-                      <FormField
-                        control={form.control}
-                        name={`items.${index}.product_id`}
-                        render={({ field: productField }) => (
-                          <FormItem>
-                            <FormLabel>Produk</FormLabel>
-                            <Select
-                              value={productField.value}
-                              onValueChange={(nextProductId) => {
-                                productField.onChange(nextProductId);
-
-                                const currentVariantId = form.getValues(
-                                  `items.${index}.product_variant_id`,
-                                );
-                                const nextVariantId =
-                                  resolveReceivingVariantSelection({
-                                    product_id: nextProductId,
-                                    current_variant_id: currentVariantId,
-                                    variant_options_by_product:
-                                      variantOptionsByProduct,
-                                  });
-                                if (nextVariantId === currentVariantId) return;
-
-                                form.setValue(
-                                  `items.${index}.product_variant_id`,
-                                  nextVariantId,
-                                  { shouldValidate: true },
-                                );
-                              }}
-                              disabled={
-                                isSubmitting || productOptions.length === 0
-                              }
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Pilih produk" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {productOptions.map((option) => (
-                                  <SelectItem
-                                    key={option.product_id}
-                                    value={option.product_id}
-                                  >
-                                    {option.product_label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name={`items.${index}.product_variant_id`}
-                        render={({ field: variantField }) => (
-                          <FormItem>
-                            <FormLabel>Varian</FormLabel>
-                            <Select
-                              value={variantField.value}
-                              onValueChange={variantField.onChange}
-                              disabled={
-                                isSubmitting || availableVariants.length === 0
-                              }
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Pilih varian" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {availableVariants.map((option) => (
-                                  <SelectItem
-                                    key={option.product_variant_id}
-                                    value={option.product_variant_id}
-                                  >
-                                    {buildVariantLabel(option)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name={`items.${index}.qty`}
-                        render={({ field: qtyField }) => (
-                          <FormItem>
-                            <FormLabel>Qty</FormLabel>
-                            <FormControl>
-                              <NumberInput
-                                value={qtyField.value}
-                                onBlur={qtyField.onBlur}
-                                onValueChange={qtyField.onChange}
-                                decimalScale={2}
-                                allowNegative={false}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name={`items.${index}.note`}
-                      render={({ field: noteField }) => (
-                        <FormItem>
-                          <FormLabel>Catatan Item (opsional)</FormLabel>
-                          <FormControl>
-                            <Input
-                              value={noteField.value ?? ''}
-                              onChange={noteField.onChange}
-                              placeholder="Catatan item"
-                              disabled={isSubmitting}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </CardContent>
-                </Card>
+                <ReceivingItemRow
+                  key={field.id}
+                  index={index}
+                  form={form}
+                  product_options={product_options}
+                  variant_options_by_product={variantOptionsByProduct}
+                  loading_variants_by_product={loadingVariantsByProduct}
+                  is_submitting={isSubmitting}
+                  can_remove={fields.length > 1}
+                  on_remove={remove}
+                  on_product_change={handleProductChange}
+                />
               );
             })}
 
@@ -435,7 +552,7 @@ export function CreateReceivingForm({
               type="button"
               variant="outline"
               onClick={handleAddItem}
-              disabled={isSubmitting || productOptions.length === 0}
+              disabled={isSubmitting || product_options.length === 0}
             >
               Tambah Item
             </Button>
@@ -525,7 +642,7 @@ export function CreateReceivingForm({
             type="submit"
             isLoading={isSubmitting}
             loadingText={loadingText}
-            disabled={productOptions.length === 0}
+            disabled={product_options.length === 0}
           >
             {submitLabel}
           </Button>

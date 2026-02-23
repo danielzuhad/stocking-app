@@ -1001,7 +1001,7 @@ export function ProductForm({
                               <FormLabel>Harga jual</FormLabel>
                               <FormControl>
                                 <NumberInput
-                                  value={field.value}
+                                  value={field.value === 0 ? undefined : field.value}
                                   onBlur={field.onBlur}
                                   onValueChange={field.onChange}
                                   placeholder="0"
@@ -1026,7 +1026,7 @@ export function ProductForm({
                               </FormLabel>
                               <FormControl>
                                 <NumberInput
-                                  value={field.value}
+                                  value={field.value === 0 ? undefined : field.value}
                                   onBlur={field.onBlur}
                                   onValueChange={field.onChange}
                                   placeholder="0"
